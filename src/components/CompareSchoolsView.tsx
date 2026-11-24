@@ -12,9 +12,11 @@ import {
 } from 'recharts';
 import type { SchoolStaffingRecord } from '../types/staffing';
 import {
+  formatDeficitPositionsText,
   formatNumber,
   formatPercent,
   formatSigned,
+  formatSurplusPositionsText,
   getDiffLabel,
   getDiffToneClass,
 } from '../utils/formatters';
@@ -447,18 +449,31 @@ export function CompareSchoolsView({
                     <td className="py-3 pl-6 pr-4 font-medium text-[#111827]">
                       ดุลอัตรากำลัง (-ขาด / +เกิน)
                     </td>
-                    {selectedSchools.map((s) => (
-                      <td key={s.school_code} className="px-4 py-3 font-mono-num">
-                        <span className={`font-semibold ${getDiffToneClass(s.diff_total)}`}>
-                          {formatSigned(s.diff_total)} ({getDiffLabel(s.diff_total)} ·{' '}
-                          {formatPercent(s.diff_teacher_pct)})
-                        </span>
-                        <div className="mt-0.5 text-[13px] text-[#6B7280]">
-                          ผอ. {formatSigned(s.diff_director)} · รอง {formatSigned(s.diff_deputy)} · ครู{' '}
-                          {formatSigned(s.diff_teacher)}
-                        </div>
-                      </td>
-                    ))}
+                    {selectedSchools.map((s) => {
+                      const deficitText = formatDeficitPositionsText(s);
+                      const surplusText = formatSurplusPositionsText(s);
+                      return (
+                        <td key={s.school_code} className="px-4 py-3 font-mono-num">
+                          <span className={`font-semibold ${getDiffToneClass(s.diff_total)}`}>
+                            {formatSigned(s.diff_total)} ({getDiffLabel(s.diff_total)} ·{' '}
+                            {formatPercent(s.diff_teacher_pct)})
+                          </span>
+                          {(deficitText || surplusText) && (
+                            <div className="mt-1 font-sans text-[13px] font-medium">
+                              {deficitText && <span className="text-[#B91C1C]">{deficitText}</span>}
+                              {deficitText && surplusText && (
+                                <span className="text-[#9CA3AF]"> · </span>
+                              )}
+                              {surplusText && <span className="text-[#0F766E]">{surplusText}</span>}
+                            </div>
+                          )}
+                          <div className="mt-0.5 text-[13px] text-[#6B7280]">
+                            ผอ. {formatSigned(s.diff_director)} · รอง ผอ. {formatSigned(s.diff_deputy)} · ครู{' '}
+                            {formatSigned(s.diff_teacher)}
+                          </div>
+                        </td>
+                      );
+                    })}
                   </tr>
 
                   {/* Section: เกษียณ & อัตราเสริม */}

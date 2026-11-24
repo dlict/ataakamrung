@@ -2,9 +2,11 @@ import { useMemo, useState } from 'react';
 import { ArrowDownUp, Download, Search } from 'lucide-react';
 import type { SchoolStaffingRecord } from '../types/staffing';
 import {
+  formatDeficitPositionsText,
   formatNumber,
   formatPercent,
   formatSigned,
+  formatSurplusPositionsText,
   getDiffLabel,
   getDiffToneClass,
 } from '../utils/formatters';
@@ -18,7 +20,16 @@ interface SchoolsTableViewProps {
   onGoToCompare: () => void;
 }
 
-type StatusFilter = 'all' | 'deficit' | 'balanced' | 'surplus' | 'vacant_dir' | 'supplement';
+type StatusFilter =
+  | 'all'
+  | 'deficit'
+  | 'deficit_teacher'
+  | 'deficit_deputy'
+  | 'deficit_director'
+  | 'balanced'
+  | 'surplus'
+  | 'vacant_dir'
+  | 'supplement';
 type ColumnGroup = 'summary' | 'positions' | 'retirement';
 type SortField =
   | 'seq_no'
@@ -52,6 +63,9 @@ export function SchoolsTableView({
           if (!hay.includes(q)) return false;
         }
         if (statusFilter === 'deficit') return r.diff_total < 0;
+        if (statusFilter === 'deficit_teacher') return r.diff_teacher < 0;
+        if (statusFilter === 'deficit_deputy') return r.diff_deputy < 0;
+        if (statusFilter === 'deficit_director') return r.diff_director < 0;
         if (statusFilter === 'balanced') return r.diff_total === 0;
         if (statusFilter === 'surplus') return r.diff_total > 0;
         if (statusFilter === 'vacant_dir') return r.criteria_director > r.actual_director;
@@ -93,7 +107,11 @@ export function SchoolsTableView({
       'คนครอง_รวม',
       'จ18คำนวณ_รวม',
       'เกณฑ์กคศ_รวม',
+      'ขาดเกิน_ผอ',
+      'ขาดเกิน_รองผอ',
+      'ขาดเกิน_ครู',
       'ขาดเกิน_รวม',
+      'ตำแหน่งที่ขาดเกณฑ์',
       'ขาดเกิน_ร้อยละ',
       'เกษียณ_รวม',
       'หลังเกษียณ_รวม',
@@ -129,7 +147,11 @@ export function SchoolsTableView({
           r.actual_total,
           r.j18_calc_total,
           r.criteria_total,
+          r.diff_director,
+          r.diff_deputy,
+          r.diff_teacher,
           r.diff_total,
+          formatDeficitPositionsText(r) || 'ไม่ขาดเกณฑ์',
           r.diff_teacher_pct,
           r.retire_total,
           r.post_retire_total,
@@ -214,10 +236,13 @@ export function SchoolsTableView({
               className="h-10 rounded-md border border-[#D1D5DB] bg-white px-3 text-sm text-[#111827] focus:border-[#1E3A8A] focus:outline-none"
             >
               <option value="all">ทุกสถานะอัตรากำลัง</option>
-              <option value="deficit">ขาดเกณฑ์</option>
+              <option value="deficit">ขาดเกณฑ์ (รวมทุกตำแหน่ง)</option>
+              <option value="deficit_teacher">ขาดเกณฑ์ตำแหน่ง ครูผู้สอน</option>
+              <option value="deficit_deputy">ขาดเกณฑ์ตำแหน่ง รอง ผอ.</option>
+              <option value="deficit_director">ขาดเกณฑ์ตำแหน่ง ผอ.</option>
               <option value="balanced">พอดีเกณฑ์</option>
               <option value="surplus">เกินเกณฑ์</option>
-              <option value="vacant_dir">ตำแหน่ง ผอ. ว่าง</option>
+              <option value="vacant_dir">ตำแหน่ง ผอ. ว่าง (คนครอง)</option>
               <option value="supplement">มีอัตราจ้าง / พรก.</option>
             </select>
           </div>
@@ -322,6 +347,9 @@ export function SchoolsTableView({
                           <span>ขาด/เกิน</span>
                           <ArrowDownUp className="h-3.5 w-3.5" aria-hidden="true" />
                         </button>
+                      </th>
+                      <th className="px-3 py-3 font-medium whitespace-nowrap">
+                        ตำแหน่งที่ขาด/เกิน
                       </th>
                       <th className="py-3 pl-3 pr-6 text-right font-medium whitespace-nowrap">
                         <button
@@ -440,6 +468,25 @@ export function SchoolsTableView({
                         >
                           {formatSigned(r.diff_total)}
                         </td>
+                        <td className="px-3 py-3 text-[13px]">
+                          {(() => {
+                            const deficitText = formatDeficitPositionsText(r);
+                            const surplusText = formatSurplusPositionsText(r);
+                            if (!deficitText && !surplusText) {
+                              return <span className="text-[#6B7280]">พอดีทุกตำแหน่ง</span>;
+                            }
+                            return (
+                              <div className="space-y-0.5">
+                                {deficitText && (
+                                  <div className="font-medium text-[#B91C1C]">{deficitText}</div>
+                                )}
+                                {surplusText && (
+                                  <div className="font-medium text-[#0F766E]">{surplusText}</div>
+                                )}
+                              </div>
+                            );
+                          })()}
+                        </td>
                         <td
                           className={`py-3 pl-3 pr-6 text-right font-mono-num ${getDiffToneClass(
                             r.diff_teacher
@@ -501,47 +548,57 @@ export function SchoolsTableView({
 
           {/* Mobile Responsive Card-Row List */}
           <div className="divide-y divide-[#F3F4F6] md:hidden">
-            {filtered.map((r) => (
-              <button
-                key={r.school_code}
-                type="button"
-                onClick={() => onSelectSchool(r)}
-                className="block w-full px-4 py-4 text-left transition-colors hover:bg-[#F9FAFB]"
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="truncate text-[15px] font-semibold text-[#111827]">
-                      {r.school_name}
-                    </p>
-                    <p className="mt-0.5 text-[13px] text-[#6B7280]">
-                      {r.school_code} · ต.{r.subdistrict} อ.{r.district} · {r.school_size}
-                    </p>
+            {filtered.map((r) => {
+              const deficitText = formatDeficitPositionsText(r);
+              const surplusText = formatSurplusPositionsText(r);
+              return (
+                <button
+                  key={r.school_code}
+                  type="button"
+                  onClick={() => onSelectSchool(r)}
+                  className="block w-full px-4 py-4 text-left transition-colors hover:bg-[#F9FAFB]"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="truncate text-[15px] font-semibold text-[#111827]">
+                        {r.school_name}
+                      </p>
+                      <p className="mt-0.5 text-[13px] text-[#6B7280]">
+                        {r.school_code} · ต.{r.subdistrict} อ.{r.district} · {r.school_size}
+                      </p>
+                    </div>
+                    <div className="shrink-0 text-right">
+                      <p
+                        className={`font-mono-num text-[15px] font-semibold ${getDiffToneClass(
+                          r.diff_total
+                        )}`}
+                      >
+                        {formatSigned(r.diff_total)}
+                      </p>
+                      <p className={`text-[13px] ${getDiffToneClass(r.diff_total)}`}>
+                        {getDiffLabel(r.diff_total)}
+                      </p>
+                    </div>
                   </div>
-                  <div className="shrink-0 text-right">
-                    <p
-                      className={`font-mono-num text-[15px] font-semibold ${getDiffToneClass(
-                        r.diff_total
-                      )}`}
-                    >
-                      {formatSigned(r.diff_total)}
-                    </p>
-                    <p className={`text-[13px] ${getDiffToneClass(r.diff_total)}`}>
-                      {getDiffLabel(r.diff_total)}
-                    </p>
-                  </div>
-                </div>
-                <div className="mt-2.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-[13px] text-[#4B5563] tabular-nums">
-                  <span>นร. {formatNumber(r.students_count)}</span>
-                  <span>คนครอง {formatNumber(r.actual_total)}</span>
-                  <span>เกณฑ์ {formatNumber(r.criteria_total)}</span>
-                  {(r.contract_teacher > 0 || r.royal_decree_teacher > 0) && (
-                    <span>
-                      จ้าง/พรก. {formatNumber(r.contract_teacher + r.royal_decree_teacher)}
-                    </span>
+                  {(deficitText || surplusText) && (
+                    <div className="mt-2 flex flex-wrap gap-x-2 text-[13px] font-medium">
+                      {deficitText && <span className="text-[#B91C1C]">{deficitText}</span>}
+                      {surplusText && <span className="text-[#0F766E]">{surplusText}</span>}
+                    </div>
                   )}
-                </div>
-              </button>
-            ))}
+                  <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-[13px] text-[#4B5563] tabular-nums">
+                    <span>นร. {formatNumber(r.students_count)}</span>
+                    <span>คนครอง {formatNumber(r.actual_total)}</span>
+                    <span>เกณฑ์ {formatNumber(r.criteria_total)}</span>
+                    {(r.contract_teacher > 0 || r.royal_decree_teacher > 0) && (
+                      <span>
+                        จ้าง/พรก. {formatNumber(r.contract_teacher + r.royal_decree_teacher)}
+                      </span>
+                    )}
+                  </div>
+                </button>
+              );
+            })}
           </div>
         </>
       )}

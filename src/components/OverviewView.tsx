@@ -6,9 +6,11 @@ import type {
   SchoolStaffingRecord,
 } from '../types/staffing';
 import {
+  formatDeficitPositionsText,
   formatNumber,
   formatPercent,
   formatSigned,
+  formatSurplusPositionsText,
   getDiffLabel,
   getDiffToneClass,
 } from '../utils/formatters';
@@ -62,6 +64,36 @@ export function OverviewView({
       map.set(key, (map.get(key) ?? 0) + 1);
     }
     return Array.from(map.entries()).sort((a, b) => b[1] - a[1]);
+  }, [records]);
+
+  const positionDeficitSummary = useMemo(() => {
+    let dirSchools = 0;
+    let dirSeats = 0;
+    let depSchools = 0;
+    let depSeats = 0;
+    let teaSchools = 0;
+    let teaSeats = 0;
+
+    for (const r of records) {
+      if (r.diff_director < 0) {
+        dirSchools += 1;
+        dirSeats += Math.abs(r.diff_director);
+      }
+      if (r.diff_deputy < 0) {
+        depSchools += 1;
+        depSeats += Math.abs(r.diff_deputy);
+      }
+      if (r.diff_teacher < 0) {
+        teaSchools += 1;
+        teaSeats += Math.abs(r.diff_teacher);
+      }
+    }
+
+    return [
+      { label: 'ขาดเกณฑ์ตำแหน่ง ผอ.', schools: dirSchools, seats: dirSeats },
+      { label: 'ขาดเกณฑ์ตำแหน่ง รอง ผอ.', schools: depSchools, seats: depSeats },
+      { label: 'ขาดเกณฑ์ตำแหน่ง ครูผู้สอน', schools: teaSchools, seats: teaSeats },
+    ];
   }, [records]);
 
   const prioritySchools = useMemo(() => {
@@ -150,9 +182,18 @@ export function OverviewView({
               ({formatPercent(summary.diffTeacherPct)}) · {getDiffLabel(summary.diffTotal)}
             </span>
           </div>
-          <p className="mt-2 text-sm text-[#4B5563] tabular-nums">
-            ผอ. {formatSigned(summary.diffDirector)} · รอง {formatSigned(summary.diffDeputy)} · ครู{' '}
-            {formatSigned(summary.diffTeacher)}
+          <p className="mt-2 flex flex-wrap gap-x-2.5 gap-y-0.5 text-sm tabular-nums">
+            <span className={getDiffToneClass(summary.diffDirector)}>
+              ผอ. {formatSigned(summary.diffDirector)}
+            </span>
+            <span className="text-[#D1D5DB]">·</span>
+            <span className={getDiffToneClass(summary.diffDeputy)}>
+              รอง ผอ. {formatSigned(summary.diffDeputy)}
+            </span>
+            <span className="text-[#D1D5DB]">·</span>
+            <span className={getDiffToneClass(summary.diffTeacher)}>
+              ครู {formatSigned(summary.diffTeacher)}
+            </span>
           </p>
         </div>
 
@@ -349,6 +390,31 @@ export function OverviewView({
                 <p className="text-[13px] text-[#6B7280]">{surplusPct.toFixed(1)}%</p>
               </div>
             </div>
+
+            <div className="mt-4 border-t border-[#F3F4F6] pt-3.5">
+              <h3 className="text-sm font-semibold text-[#374151]">
+                โรงเรียนที่ขาดเกณฑ์ แยกตามตำแหน่ง (ผอ. / รอง ผอ. / ครู)
+              </h3>
+              <div className="mt-2 space-y-2 text-sm tabular-nums">
+                {positionDeficitSummary.map((item) => (
+                  <div key={item.label} className="flex items-center justify-between">
+                    <span className="text-[#4B5563]">{item.label}</span>
+                    <span className="font-mono-num">
+                      <span className="font-medium text-[#111827]">
+                        {formatNumber(item.schools)} แห่ง
+                      </span>
+                      <span
+                        className={`ml-2 font-semibold ${
+                          item.seats > 0 ? 'text-[#B91C1C]' : 'text-[#6B7280]'
+                        }`}
+                      >
+                        ({item.seats > 0 ? `ขาด ${formatNumber(item.seats)} อัตรา` : 'ไม่ขาด'})
+                      </span>
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
 
           {/* School Sizes */}
@@ -457,59 +523,91 @@ export function OverviewView({
                   <th className="px-3 py-3 text-right font-medium">คนครอง</th>
                   <th className="px-3 py-3 text-right font-medium">เกณฑ์ ก.ค.ศ.</th>
                   <th className="px-3 py-3 text-right font-medium">ขาด/เกิน</th>
+                  <th className="hidden lg:table-cell px-3 py-3 font-medium">
+                    จำแนกตำแหน่ง (ผอ./รอง/ครู)
+                  </th>
                   <th className="hidden sm:table-cell py-3 pl-3 pr-6 text-right font-medium">
                     อัตราจ้าง+พรก.
                   </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#F3F4F6]">
-                {prioritySchools.map((s) => (
-                  <tr
-                    key={s.school_code}
-                    onClick={() => onSelectSchool(s)}
-                    className="cursor-pointer transition-colors hover:bg-[#F9FAFB]"
-                  >
-                    <td className="py-3.5 pl-6 pr-3 font-mono-num text-[#6B7280]">
-                      {s.school_code}
-                    </td>
-                    <td className="px-3 py-3.5 font-medium text-[#111827]">
-                      <span>{s.school_name}</span>
-                      {s.is_flagged && (
-                        <span className="ml-1.5 text-[13px] font-normal text-[#6B7280]">
-                          (มีสาขา/หมายเหตุ)
-                        </span>
-                      )}
-                    </td>
-                    <td className="hidden md:table-cell px-3 py-3.5 text-[#4B5563]">
-                      ต.{s.subdistrict} · อ.{s.district}
-                    </td>
-                    <td className="hidden sm:table-cell px-3 py-3.5 text-[#4B5563]">
-                      {s.school_size}
-                    </td>
-                    <td className="px-3 py-3.5 text-right font-mono-num text-[#111827]">
-                      {formatNumber(s.students_count)}
-                    </td>
-                    <td className="px-3 py-3.5 text-right font-mono-num text-[#111827]">
-                      {formatNumber(s.actual_total)}
-                    </td>
-                    <td className="px-3 py-3.5 text-right font-mono-num text-[#4B5563]">
-                      {formatNumber(s.criteria_total)}
-                    </td>
-                    <td
-                      className={`px-3 py-3.5 text-right font-mono-num font-semibold ${getDiffToneClass(
-                        s.diff_total
-                      )}`}
+                {prioritySchools.map((s) => {
+                  const deficitText = formatDeficitPositionsText(s);
+                  const surplusText = formatSurplusPositionsText(s);
+                  return (
+                    <tr
+                      key={s.school_code}
+                      onClick={() => onSelectSchool(s)}
+                      className="cursor-pointer transition-colors hover:bg-[#F9FAFB]"
                     >
-                      {formatSigned(s.diff_total)}
-                      <span className="ml-1 font-normal text-[13px]">
-                        ({formatPercent(s.diff_teacher_pct)})
-                      </span>
-                    </td>
-                    <td className="hidden sm:table-cell py-3.5 pl-3 pr-6 text-right font-mono-num text-[#4B5563]">
-                      {formatNumber(s.contract_teacher + s.royal_decree_teacher)}
-                    </td>
-                  </tr>
-                ))}
+                      <td className="py-3.5 pl-6 pr-3 font-mono-num text-[#6B7280]">
+                        {s.school_code}
+                      </td>
+                      <td className="px-3 py-3.5 font-medium text-[#111827]">
+                        <div>
+                          <span>{s.school_name}</span>
+                          {s.is_flagged && (
+                            <span className="ml-1.5 text-[13px] font-normal text-[#6B7280]">
+                              (มีสาขา/หมายเหตุ)
+                            </span>
+                          )}
+                        </div>
+                        <div className="mt-0.5 text-[13px] font-normal lg:hidden">
+                          {deficitText && (
+                            <span className="font-medium text-[#B91C1C]">{deficitText}</span>
+                          )}
+                          {deficitText && surplusText && <span className="text-[#9CA3AF]"> · </span>}
+                          {surplusText && (
+                            <span className="font-medium text-[#0F766E]">{surplusText}</span>
+                          )}
+                          {!deficitText && !surplusText && (
+                            <span className="text-[#6B7280]">พอดีทุกตำแหน่ง</span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="hidden md:table-cell px-3 py-3.5 text-[#4B5563]">
+                        ต.{s.subdistrict} · อ.{s.district}
+                      </td>
+                      <td className="hidden sm:table-cell px-3 py-3.5 text-[#4B5563]">
+                        {s.school_size}
+                      </td>
+                      <td className="px-3 py-3.5 text-right font-mono-num text-[#111827]">
+                        {formatNumber(s.students_count)}
+                      </td>
+                      <td className="px-3 py-3.5 text-right font-mono-num text-[#111827]">
+                        {formatNumber(s.actual_total)}
+                      </td>
+                      <td className="px-3 py-3.5 text-right font-mono-num text-[#4B5563]">
+                        {formatNumber(s.criteria_total)}
+                      </td>
+                      <td
+                        className={`px-3 py-3.5 text-right font-mono-num font-semibold ${getDiffToneClass(
+                          s.diff_total
+                        )}`}
+                      >
+                        {formatSigned(s.diff_total)}
+                        <span className="ml-1 font-normal text-[13px]">
+                          ({formatPercent(s.diff_teacher_pct)})
+                        </span>
+                      </td>
+                      <td className="hidden lg:table-cell px-3 py-3.5 text-[13px]">
+                        {deficitText && (
+                          <div className="font-medium text-[#B91C1C]">{deficitText}</div>
+                        )}
+                        {surplusText && (
+                          <div className="font-medium text-[#0F766E]">{surplusText}</div>
+                        )}
+                        {!deficitText && !surplusText && (
+                          <span className="text-[#6B7280]">พอดีทุกตำแหน่ง</span>
+                        )}
+                      </td>
+                      <td className="hidden sm:table-cell py-3.5 pl-3 pr-6 text-right font-mono-num text-[#4B5563]">
+                        {formatNumber(s.contract_teacher + s.royal_decree_teacher)}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>

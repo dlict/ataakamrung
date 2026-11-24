@@ -13,6 +13,7 @@ interface ComparePeriodsViewProps {
   onSelectPeriod: (periodId: string) => void;
   onDeletePeriod: (periodId: string) => Promise<void>;
   onDeleteYear: (buddhistYear: number) => Promise<void>;
+  onDeleteAll: () => Promise<void>;
   onOpenUpload: () => void;
 }
 
@@ -37,6 +38,7 @@ export function ComparePeriodsView({
   onSelectPeriod,
   onDeletePeriod,
   onDeleteYear,
+  onDeleteAll,
   onOpenUpload,
 }: ComparePeriodsViewProps) {
   const [periodAId, setPeriodAId] = useState<string>('');
@@ -48,6 +50,8 @@ export function ComparePeriodsView({
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [confirmDeleteYear, setConfirmDeleteYear] = useState<number | null>(null);
   const [deletingYear, setDeletingYear] = useState<number | null>(null);
+  const [confirmDeleteAll, setConfirmDeleteAll] = useState(false);
+  const [deletingAll, setDeletingAll] = useState(false);
 
   const chronological = useMemo(
     () =>
@@ -173,22 +177,65 @@ export function ComparePeriodsView({
     }
   }
 
+  async function handleConfirmDeleteAll() {
+    setDeletingAll(true);
+    try {
+      await onDeleteAll();
+      setConfirmDeleteAll(false);
+    } finally {
+      setDeletingAll(false);
+    }
+  }
+
   return (
     <div className="space-y-6">
       {/* Year-level Management */}
       {yearsSummary.length > 0 && (
         <section className="rounded-lg border border-[#E5E7EB] bg-white p-5 sm:p-6">
-          <div className="flex flex-col gap-2 border-b border-[#F3F4F6] pb-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-col gap-3 border-b border-[#F3F4F6] pb-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <h2 className="text-lg font-semibold text-[#111827]">
                 จัดการข้อมูลแยกตามปี พ.ศ.
               </h2>
               <p className="mt-0.5 text-sm text-[#6B7280]">
                 {supabaseStatus?.tablesReady
-                  ? 'สามารถลบข้อมูลทั้งปี พ.ศ. หรือเลือกงวดรายเดือนด้านล่างออกจากฐานข้อมูล Supabase ได้'
+                  ? 'สามารถลบข้อมูลทั้งปี พ.ศ. ลบงวดรายเดือน หรือล้างข้อมูลทั้งหมดออกจากฐานข้อมูล Supabase ได้'
                   : 'เมื่อเชื่อมต่อฐานข้อมูล Supabase แล้ว จะสามารถลบข้อมูลรายปีและรายเดือนได้ถาวร'}
               </p>
             </div>
+
+            {supabaseStatus?.tablesReady && (
+              <div className="shrink-0 text-sm">
+                {confirmDeleteAll ? (
+                  <div className="flex items-center gap-2.5 rounded-md border border-[#FECACA] bg-[#FEF2F2] px-3 py-1.5">
+                    <button
+                      type="button"
+                      disabled={deletingAll}
+                      onClick={handleConfirmDeleteAll}
+                      className="font-semibold text-[#B91C1C] hover:underline disabled:opacity-50"
+                    >
+                      {deletingAll ? 'กำลังลบทั้งหมด...' : 'ยืนยันลบข้อมูลทั้งหมด'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setConfirmDeleteAll(false)}
+                      className="text-[#6B7280] hover:text-[#111827]"
+                    >
+                      ยกเลิก
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setConfirmDeleteAll(true)}
+                    className="inline-flex items-center gap-1.5 rounded-md border border-[#FECACA] bg-[#FEF2F2] px-3 py-1.5 text-sm font-medium text-[#B91C1C] transition-colors hover:bg-[#FEE2E2]"
+                  >
+                    <Trash2 className="h-4 w-4" aria-hidden="true" />
+                    <span>ลบข้อมูลทั้งหมด</span>
+                  </button>
+                )}
+              </div>
+            )}
           </div>
 
           <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">

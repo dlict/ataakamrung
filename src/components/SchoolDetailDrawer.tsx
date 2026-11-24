@@ -1,9 +1,11 @@
 import { X } from 'lucide-react';
 import type { SchoolStaffingRecord } from '../types/staffing';
 import {
+  formatDeficitPositionsText,
   formatNumber,
   formatPercent,
   formatSigned,
+  formatSurplusPositionsText,
   getDiffLabel,
   getDiffToneClass,
 } from '../utils/formatters';
@@ -21,6 +23,8 @@ export function SchoolDetailDrawer({ school, onClose }: SchoolDetailDrawerProps)
     school.actual_teacher > 0
       ? (school.students_count / school.actual_teacher).toFixed(1)
       : '—';
+  const deficitText = formatDeficitPositionsText(school);
+  const surplusText = formatSurplusPositionsText(school);
 
   return (
     <div
@@ -104,7 +108,7 @@ export function SchoolDetailDrawer({ school, onClose }: SchoolDetailDrawerProps)
 
           {/* 4-Level Staffing Comparison Table */}
           <div>
-            <div className="flex items-baseline justify-between">
+            <div className="flex flex-wrap items-baseline justify-between gap-2">
               <h3 className="text-[15px] font-semibold text-[#111827]">
                 ตารางเปรียบเทียบอัตรากำลังรายตำแหน่ง
               </h3>
@@ -117,6 +121,13 @@ export function SchoolDetailDrawer({ school, onClose }: SchoolDetailDrawerProps)
                 {formatPercent(school.diff_teacher_pct)})
               </span>
             </div>
+            {(deficitText || surplusText) && (
+              <p className="mt-1.5 text-sm font-medium">
+                {deficitText && <span className="text-[#B91C1C]">{deficitText}</span>}
+                {deficitText && surplusText && <span className="text-[#9CA3AF]"> · </span>}
+                {surplusText && <span className="text-[#0F766E]">{surplusText}</span>}
+              </p>
+            )}
 
             <div className="mt-3 overflow-x-auto rounded-md border border-[#E5E7EB]">
               <table className="w-full border-collapse text-right text-sm">

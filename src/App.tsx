@@ -27,7 +27,6 @@ export default function App() {
   const [records, setRecords] = useState<SchoolStaffingRecord[]>([]);
   const [loadingPeriods, setLoadingPeriods] = useState<boolean>(true);
   const [loadingRecords, setLoadingRecords] = useState<boolean>(false);
-  const [seedingInitial, setSeedingInitial] = useState<boolean>(false);
   const [errorMessage, setErrorMessage] = useState<string>('');
 
   const [selectedDistrict, setSelectedDistrict] = useState<string>('all');
@@ -218,23 +217,17 @@ export default function App() {
     await loadInitialData(nextFallback);
   }
 
-  async function handleSeedInitial() {
-    setSeedingInitial(true);
-    setErrorMessage('');
-    try {
-      const res = await fetch('/api/periods/seed-initial', { method: 'POST' });
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error || 'ไม่สามารถนำเข้าข้อมูลตั้งต้นได้');
-      }
-      await loadInitialData(data.period?.id);
-    } catch (err) {
-      setErrorMessage(
-        err instanceof Error ? err.message : 'ไม่สามารถนำเข้าข้อมูลตั้งต้นได้'
-      );
-    } finally {
-      setSeedingInitial(false);
+  async function handleDeleteAllPeriods() {
+    const res = await fetch('/api/periods', { method: 'DELETE' });
+    const data = await res.json();
+    if (!res.ok) {
+      setErrorMessage(data.error || 'ไม่สามารถลบข้อมูลทั้งหมดได้');
+      return;
     }
+    setSelectedPeriodId('');
+    setRecords([]);
+    setCompareSchoolCodes([]);
+    await loadInitialData();
   }
 
   function handleUploadSuccess(savedPeriod: ReportPeriod) {
@@ -277,7 +270,7 @@ export default function App() {
         {supabaseStatus && !supabaseStatus.tablesReady && (
           <div className="mb-6 flex flex-col gap-2 rounded-lg border border-[#E5E7EB] bg-white px-4 py-3.5 text-sm sm:flex-row sm:items-center sm:justify-between">
             <p className="text-[#4B5563]">
-              <strong className="font-semibold text-[#111827]">โหมดข้อมูลตั้งต้น:</strong>{' '}
+              <strong className="font-semibold text-[#111827]">สถานะฐานข้อมูล:</strong>{' '}
               {supabaseStatus.message}
             </p>
             <button
@@ -317,29 +310,30 @@ export default function App() {
             <div className="h-72 animate-pulse rounded-lg border border-[#E5E7EB] bg-white" />
           </div>
         ) : periods.length === 0 ? (
-          <section className="rounded-lg border border-dashed border-[#D1D5DB] bg-white p-10 text-center">
-            <h1 className="text-lg font-semibold text-[#111827]">
-              ยังไม่มีงวดข้อมูลในฐานข้อมูล Supabase
+          <section className="rounded-lg border border-dashed border-[#D1D5DB] bg-white px-6 py-14 text-center">
+            <h1 className="text-xl font-semibold text-[#111827]">
+              ยังไม่มีข้อมูลอัตรากำลังในระบบ
             </h1>
-            <p className="mx-auto mt-1.5 max-w-lg text-sm text-[#6B7280]">
-              คุณสามารถนำเข้าไฟล์ CSV งวดใหม่ตามปี พ.ศ./เดือน หรือนำเข้าข้อมูลตั้งต้นจากไฟล์แนบ (พ.ศ. 2569) เพื่อเริ่มต้นใช้งานได้ทันที
+            <p className="mx-auto mt-2 max-w-lg text-sm text-[#6B7280] leading-relaxed">
+              ระบบพร้อมสำหรับเริ่มต้นใหม่แบบว่างเปล่า กรุณาอัปโหลดไฟล์ CSV รายงานอัตรากำลังตามปี พ.ศ. และเดือนที่ต้องการเพื่อแสดงผลแดชบอร์ด
             </p>
-            <div className="mt-5 flex flex-wrap items-center justify-center gap-3">
+            <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
               <button
                 type="button"
                 onClick={() => setIsUploadOpen(true)}
-                className="rounded-md bg-[#1E3A8A] px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-[#1E40AF]"
+                className="rounded-md bg-[#1E3A8A] px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-[#1E40AF]"
               >
                 นำเข้าไฟล์ CSV ใหม่
               </button>
-              <button
-                type="button"
-                disabled={seedingInitial}
-                onClick={handleSeedInitial}
-                className="rounded-md border border-[#D1D5DB] bg-white px-4 py-2 text-sm font-medium text-[#111827] transition-colors hover:bg-[#F9FAFB] disabled:opacity-50"
-              >
-                {seedingInitial ? 'กำลังนำเข้า...' : 'โหลดข้อมูลตั้งต้น (พ.ศ. 2569)'}
-              </button>
+              {!supabaseStatus?.tablesReady && (
+                <button
+                  type="button"
+                  onClick={() => setIsSetupOpen(true)}
+                  className="rounded-md border border-[#D1D5DB] bg-white px-5 py-2.5 text-sm font-medium text-[#111827] transition-colors hover:bg-[#F9FAFB]"
+                >
+                  ตั้งค่าการเชื่อมต่อ Supabase
+                </button>
+              )}
             </div>
           </section>
         ) : (
@@ -386,6 +380,7 @@ export default function App() {
                 }}
                 onDeletePeriod={handleDeletePeriod}
                 onDeleteYear={handleDeleteYear}
+                onDeleteAll={handleDeleteAllPeriods}
                 onOpenUpload={() => setIsUploadOpen(true)}
               />
             )}

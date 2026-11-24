@@ -5,7 +5,6 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { createServer as createViteServer } from 'vite';
-import { parseSchoolStaffingCsv } from './src/utils/csvParser.ts';
 import {
   THAI_MONTHS,
   type ReportPeriod,
@@ -16,15 +15,7 @@ import {
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const INITIAL_CSV_PATH = path.resolve(
-  __dirname,
-  'public',
-  'assets',
-  'aistudio',
-  '___________________________._______________1__1058010000_____________2569_-2026-11-24_10-27-13_1d0aeea8.csv'
-);
 const SCHEMA_SQL_PATH = path.resolve(__dirname, 'supabase', 'schema.sql');
-const INITIAL_PERIOD_ID = 'initial-2569-11';
 const UUID_REGEX =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -135,40 +126,6 @@ function getSupabaseClient(): SupabaseClient | null {
   });
 }
 
-let cachedInitialSnapshot: {
-  period: ReportPeriod;
-  records: SchoolStaffingRecord[];
-} | null = null;
-
-function loadInitialSnapshot(): {
-  period: ReportPeriod;
-  records: SchoolStaffingRecord[];
-} {
-  if (cachedInitialSnapshot) return cachedInitialSnapshot;
-  const csvText = fs.readFileSync(INITIAL_CSV_PATH, 'utf8');
-  const parsed = parseSchoolStaffingCsv(csvText);
-  const period: ReportPeriod = {
-    id: INITIAL_PERIOD_ID,
-    buddhist_year: 2569,
-    month_number: 11,
-    month_label: 'พฤศจิกายน',
-    period_note: 'ข้อมูลตั้งต้น (สพป.แม่ฮ่องสอน เขต 1)',
-    source_filename: 'ข้อมูลอัตรากำลัง_1058010000_2569.csv',
-    total_schools: parsed.summary.totalSchools,
-    total_students: parsed.summary.totalStudents,
-    total_classrooms: parsed.summary.totalClassrooms,
-    total_actual_staff: parsed.summary.actualTotal,
-    total_j18_calc: parsed.summary.j18CalcTotal,
-    total_criteria: parsed.summary.criteriaTotal,
-    net_diff: parsed.summary.diffTotal,
-    net_diff_pct: parsed.summary.diffTeacherPct,
-    created_at: '2026-11-24T03:27:13.000Z',
-    is_initial_snapshot: true,
-  };
-  cachedInitialSnapshot = { period, records: parsed.records };
-  return cachedInitialSnapshot;
-}
-
 async function checkSupabaseStatus(): Promise<SupabaseStatus> {
   const cfg = inspectSupabaseConfig();
 
@@ -178,7 +135,7 @@ async function checkSupabaseStatus(): Promise<SupabaseStatus> {
       tablesReady: false,
       mode: 'preview',
       message:
-        'ยังไม่ได้ตั้งค่า SUPABASE_URL และ SUPABASE_SERVICE_ROLE_KEY (กำลังแสดงข้อมูลตั้งต้นจากไฟล์ CSV)',
+        'ยังไม่ได้ตั้งค่า SUPABASE_URL และ SUPABASE_SERVICE_ROLE_KEY (กรุณาตั้งค่า Supabase เพื่ออัปโหลดและบันทึกข้อมูล)',
       diagnostic: {
         urlValid: false,
         urlNote: cfg.urlNote,
@@ -407,57 +364,6 @@ function sanitizeRecords(rawRecords: unknown[]): SchoolStaffingRecord[] {
   });
 }
 
-async function seedInitialSnapshotToSupabase(client: SupabaseClient) {
-  const snapshot = loadInitialSnapshot();
-  const { period, records } = snapshot;
-
-  const { data: insertedPeriod, error: periodError } = await client
-    .from('report_periods')
-    .upsert(
-      {
-        buddhist_year: period.buddhist_year,
-        month_number: period.month_number,
-        month_label: period.month_label,
-        period_note: period.period_note,
-        source_filename: period.source_filename,
-        total_schools: period.total_schools,
-        total_students: period.total_students,
-        total_classrooms: period.total_classrooms,
-        total_actual_staff: period.total_actual_staff,
-        total_j18_calc: period.total_j18_calc,
-        total_criteria: period.total_criteria,
-        net_diff: period.net_diff,
-        net_diff_pct: period.net_diff_pct,
-      },
-      { onConflict: 'buddhist_year,month_number' }
-    )
-    .select()
-    .single();
-
-  if (periodError || !insertedPeriod) {
-    throw new Error(periodError?.message || 'ไม่สามารถบันทึกงวดข้อมูลตั้งต้นได้');
-  }
-
-  const periodId = insertedPeriod.id as string;
-  await client.from('school_staffing_records').delete().eq('period_id', periodId);
-
-  const batchSize = 500;
-  for (let i = 0; i < records.length; i += batchSize) {
-    const batch = records.slice(i, i + batchSize).map((r) => ({
-      ...r,
-      period_id: periodId,
-    }));
-    const { error: recErr } = await client
-      .from('school_staffing_records')
-      .insert(batch);
-    if (recErr) {
-      throw new Error(recErr.message);
-    }
-  }
-
-  return insertedPeriod as ReportPeriod;
-}
-
 function verifySameOrigin(
   req: express.Request,
   res: express.Response,
@@ -522,8 +428,7 @@ async function startServer() {
     try {
       const status = await checkSupabaseStatus();
       if (!status.tablesReady) {
-        const snapshot = loadInitialSnapshot();
-        res.json({ mode: 'preview', periods: [snapshot.period] });
+        res.json({ mode: 'preview', periods: [] });
         return;
       }
 
@@ -546,7 +451,7 @@ async function startServer() {
     }
   });
 
-  app.post('/api/periods/seed-initial', async (_req, res) => {
+  app.delete('/api/periods', async (_req, res) => {
     try {
       const status = await checkSupabaseStatus();
       if (!status.tablesReady) {
@@ -557,11 +462,18 @@ async function startServer() {
       }
 
       const client = getSupabaseClient()!;
-      const seeded = await seedInitialSnapshotToSupabase(client);
-      res.status(201).json({ period: seeded });
+      const { error } = await client
+        .from('report_periods')
+        .delete()
+        .not('id', 'is', null);
+
+      if (error) {
+        throw new Error(error.message);
+      }
+      res.json({ ok: true });
     } catch (err) {
       res.status(500).json({
-        error: err instanceof Error ? err.message : 'นำเข้าข้อมูลตั้งต้นไม่สำเร็จ',
+        error: err instanceof Error ? err.message : 'ไม่สามารถลบข้อมูลทั้งหมดได้',
       });
     }
   });
@@ -571,9 +483,8 @@ async function startServer() {
       const { id } = req.params;
       const status = await checkSupabaseStatus();
 
-      if (!status.tablesReady || id === INITIAL_PERIOD_ID) {
-        const snapshot = loadInitialSnapshot();
-        res.json({ mode: status.mode, records: snapshot.records });
+      if (!status.tablesReady) {
+        res.json({ mode: 'preview', records: [] });
         return;
       }
 

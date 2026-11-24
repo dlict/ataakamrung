@@ -141,7 +141,7 @@ export function SupabaseSetupDrawer({
             </div>
             <p className="text-[#4B5563]">
               นำคำสั่ง SQL ด้านล่างไปวางและกด Run ในหน้า SQL Editor ของโปรเจกต์ Supabase
-              (เมื่อสร้างตารางเสร็จแล้ว ระบบจะนำเข้าข้อมูลตั้งต้นจากไฟล์ CSV แรกให้โดยอัตโนมัติ)
+              (เมื่อเชื่อมต่อเสร็จแล้ว สามารถกดปุ่ม + นำเข้าไฟล์ CSV เพื่อเพิ่มงวดข้อมูลของหน่วยงานได้ทันที)
             </p>
             <pre className="max-h-72 overflow-auto rounded-md border border-[#E5E7EB] bg-[#111827] p-3.5 font-mono-num text-[13px] leading-relaxed text-[#F3F4F6]">
               {schemaSql || 'กำลังโหลด...'}
