@@ -16,6 +16,7 @@ import {
 } from '../utils/formatters';
 import { DistrictComparisonChart } from './DistrictComparisonChart';
 import { DistrictPositionChart } from './DistrictPositionChart';
+import { SchoolDistributionCharts } from './SchoolDistributionCharts';
 
 interface OverviewViewProps {
   records: SchoolStaffingRecord[];
@@ -226,6 +227,9 @@ export function OverviewView({
         selectedDistrict={selectedDistrict}
         onSelectDistrict={onSelectDistrict}
       />
+
+      {/* Recharts Pie Charts: School Size & Type Distribution */}
+      <SchoolDistributionCharts records={records} />
 
       {/* Main Analytical Two-Column Layout */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
