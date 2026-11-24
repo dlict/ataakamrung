@@ -14,6 +14,7 @@ import {
   getDiffLabel,
   getDiffToneClass,
 } from '../utils/formatters';
+import { DistrictComparisonChart } from './DistrictComparisonChart';
 import { DistrictPositionChart } from './DistrictPositionChart';
 
 interface OverviewViewProps {
@@ -212,7 +213,14 @@ export function OverviewView({
         </div>
       </section>
 
-      {/* Recharts Position-by-District Visualization */}
+      {/* Recharts Actual vs Criteria per District */}
+      <DistrictComparisonChart
+        districts={districtBreakdown}
+        selectedDistrict={selectedDistrict}
+        onSelectDistrict={onSelectDistrict}
+      />
+
+      {/* Recharts Position-by-District Deficit/Surplus Visualization */}
       <DistrictPositionChart
         districts={districtBreakdown}
         selectedDistrict={selectedDistrict}

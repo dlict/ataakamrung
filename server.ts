@@ -214,16 +214,23 @@ async function checkSupabaseStatus(): Promise<SupabaseStatus> {
         };
       }
 
-      if (status === 401 || status === 403 || msg.includes('jwt') || msg.includes('api key')) {
-        const hint =
-          cfg.jwtRole === 'anon' || cfg.keyKind.startsWith('sb_publishable')
-            ? ' (พบว่าคีย์ที่ใส่เป็น anon/publishable key ไม่ใช่ service_role/secret key)'
-            : '';
+      if (status === 401 || status === 403 || code === '42501' || msg.includes('jwt') || msg.includes('api key')) {
+        const isPublishableOrAnon =
+          cfg.jwtRole === 'anon' || cfg.keyKind.startsWith('sb_publishable');
+        const isMissingGrant =
+          !isPublishableOrAnon && (code === '42501' || msg.includes('permission denied'));
+
+        const customMessage = isPublishableOrAnon
+          ? `คีย์ที่ใส่เป็น anon/publishable key ไม่ใช่ service_role/secret key: ${error.message}`
+          : isMissingGrant
+            ? 'คีย์ sb_secret_ ถูกต้องแล้ว แต่ยังไม่มีสิทธิ์ GRANT บนตารางข้อมูล กรุณารันคำสั่ง SQL ล่าสุดในหน้าต่างตั้งค่า Supabase (เพิ่มสิทธิ์ GRANT ให้ service_role)'
+            : `พบตัวแปร Supabase แล้ว แต่คีย์เชื่อมต่อไม่ถูกต้องหรือไม่มีสิทธิ์เข้าถึง: ${error.message}`;
+
         return {
           configured: true,
           tablesReady: false,
           mode: 'preview',
-          message: `พบตัวแปร Supabase แล้ว แต่คีย์เชื่อมต่อไม่ถูกต้องหรือไม่มีสิทธิ์เข้าถึง${hint}: ${error.message}`,
+          message: customMessage,
           diagnostic: {
             urlValid: cfg.urlValid,
             urlNote: cfg.urlNote,

@@ -139,7 +139,12 @@ export function UploadModal({
               <p className="font-medium">
                 ยังไม่ได้เชื่อมต่อฐานข้อมูล Supabase จึงยังไม่สามารถบันทึกงวดใหม่ถาวรได้
               </p>
-              <p className="mt-1">
+              {supabaseStatus?.message && (
+                <p className="mt-1 text-xs text-[#78350F]">
+                  สาเหตุ: {supabaseStatus.message}
+                </p>
+              )}
+              <p className="mt-1.5">
                 คุณสามารถทดสอบเลือกไฟล์เพื่อดูการประมวลผลก่อนได้ หรือ{' '}
                 <button
                   type="button"
@@ -149,7 +154,7 @@ export function UploadModal({
                   }}
                   className="font-semibold underline"
                 >
-                  ดูวิธีตั้งค่า Supabase
+                  ดูวิธีตั้งค่าและตรวจสอบคีย์ Supabase
                 </button>
               </p>
             </div>

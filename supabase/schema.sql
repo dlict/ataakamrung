@@ -96,14 +96,15 @@ create index if not exists idx_report_periods_sort on public.report_periods(budd
 alter table public.report_periods enable row level security;
 alter table public.school_staffing_records enable row level security;
 
--- Note: Server routes using SUPABASE_SERVICE_ROLE_KEY bypass RLS automatically.
--- If connecting with SUPABASE_ANON_KEY in trusted internal setups, allow read/write via policies below:
-drop policy if exists "Allow read report_periods" on public.report_periods;
-create policy "Allow read report_periods"
-  on public.report_periods for select
-  using (true);
+-- Grant explicit schema & table privileges to service_role (required for sb_secret_ keys)
+grant usage on schema public to service_role;
+grant select, insert, update, delete on table public.report_periods to service_role;
+grant select, insert, update, delete on table public.school_staffing_records to service_role;
+grant usage, select on all sequences in schema public to service_role;
 
+-- Keep direct public/anon access locked down (all requests go through Express backend)
+drop policy if exists "Allow read report_periods" on public.report_periods;
 drop policy if exists "Allow read school_staffing_records" on public.school_staffing_records;
-create policy "Allow read school_staffing_records"
-  on public.school_staffing_records for select
-  using (true);
+revoke all on table public.report_periods from anon;
+revoke all on table public.school_staffing_records from anon;
+
