@@ -23,15 +23,21 @@ import {
 
 interface CompareSchoolsViewProps {
   allRecords: SchoolStaffingRecord[];
+  districts: string[];
+  selectedDistrict: string;
+  onSelectDistrict: (district: string) => void;
   selectedSchoolCodes: string[];
   onChangeSelectedCodes: (codes: string[]) => void;
   periodLabel: string;
 }
 
-const MAX_COMPARE_SCHOOLS = 4;
+const MAX_COMPARE_SCHOOLS = 6;
 
 export function CompareSchoolsView({
   allRecords,
+  districts,
+  selectedDistrict,
+  onSelectDistrict,
   selectedSchoolCodes,
   onChangeSelectedCodes,
   periodLabel,
@@ -49,7 +55,11 @@ export function CompareSchoolsView({
   const searchResults = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
     const selectedSet = new Set(selectedSchoolCodes);
-    const pool = allRecords.filter((r) => !selectedSet.has(r.school_code));
+    const pool = allRecords.filter((r) => {
+      if (selectedSet.has(r.school_code)) return false;
+      if (selectedDistrict !== 'all' && r.district !== selectedDistrict) return false;
+      return true;
+    });
     if (!q) return pool.slice(0, 8);
     return pool
       .filter((r) =>
@@ -58,14 +68,13 @@ export function CompareSchoolsView({
           .includes(q)
       )
       .slice(0, 12);
-  }, [allRecords, searchQuery, selectedSchoolCodes]);
+  }, [allRecords, searchQuery, selectedSchoolCodes, selectedDistrict]);
 
   const chartData = useMemo(
     () =>
       selectedSchools.map((s) => ({
         name: s.school_name,
         actual: s.actual_total,
-        j18: s.j18_calc_total,
         criteria: s.criteria_total,
         diff: s.diff_total,
       })),
@@ -112,7 +121,7 @@ export function CompareSchoolsView({
         </div>
 
         {/* Selected Schools Bar */}
-        <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {selectedSchools.map((s) => (
             <div
               key={s.school_code}
@@ -141,18 +150,34 @@ export function CompareSchoolsView({
         {/* Search & Pick School */}
         {selectedSchools.length < MAX_COMPARE_SCHOOLS && (
           <div className="mt-4">
-            <div className="relative">
-              <Search
-                className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#9CA3AF]"
-                aria-hidden="true"
-              />
-              <input
-                type="search"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="พิมพ์ชื่อโรงเรียน รหัสโรงเรียน หรืออำเภอ เพื่อเพิ่มเข้าตารางเปรียบเทียบ..."
-                className="h-10 w-full rounded-md border border-[#D1D5DB] bg-white pl-9 pr-3 text-sm text-[#111827] placeholder:text-[#9CA3AF] focus:border-[#1E3A8A] focus:outline-none"
-              />
+            <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center">
+              <div className="relative flex-1">
+                <Search
+                  className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#9CA3AF]"
+                  aria-hidden="true"
+                />
+                <input
+                  type="search"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="พิมพ์ชื่อโรงเรียน รหัสโรงเรียน หรือตำบล เพื่อเพิ่มเข้าตารางเปรียบเทียบ..."
+                  className="h-10 w-full rounded-md border border-[#D1D5DB] bg-white pl-9 pr-3 text-sm text-[#111827] placeholder:text-[#9CA3AF] focus:border-[#1E3A8A] focus:outline-none"
+                />
+              </div>
+
+              <select
+                aria-label="กรองตามอำเภอสำหรับเลือกโรงเรียนเปรียบเทียบ"
+                value={selectedDistrict}
+                onChange={(e) => onSelectDistrict(e.target.value)}
+                className="h-10 rounded-md border border-[#D1D5DB] bg-white px-3 text-sm text-[#111827] focus:border-[#1E3A8A] focus:outline-none"
+              >
+                <option value="all">ทุกอำเภอ</option>
+                {districts.map((d) => (
+                  <option key={d} value={d}>
+                    อ.{d}
+                  </option>
+                ))}
+              </select>
             </div>
 
             <div className="mt-2.5 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
@@ -194,27 +219,28 @@ export function CompareSchoolsView({
           <section className="rounded-lg border border-[#E5E7EB] bg-white p-5 sm:p-6">
             <div className="border-b border-[#F3F4F6] pb-4">
               <h2 className="text-lg font-semibold text-[#111827]">
-                กราฟเปรียบเทียบอัตรากำลังรวม (คนครองจริง · จ.18 · เกณฑ์ ก.ค.ศ.)
+                กราฟเปรียบเทียบอัตรากำลังรวม (คนครองจริง · เกณฑ์ ก.ค.ศ.)
               </h2>
               <p className="mt-0.5 text-sm text-[#6B7280]">
-                เปรียบเทียบจำนวนบุคลากรของโรงเรียนที่เลือกในแต่ละระดับเกณฑ์
+                เปรียบเทียบจำนวนบุคลากรจริงกับเกณฑ์ ก.ค.ศ. ของโรงเรียนที่เลือก
               </p>
             </div>
 
-            <div className="mt-5 h-[330px] w-full">
+            <div className="mt-5 h-[350px] w-full">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart
                   data={chartData}
-                  margin={{ top: 24, right: 16, left: -4, bottom: 8 }}
+                  margin={{ top: 24, right: 16, left: -4, bottom: 12 }}
                   barCategoryGap="18%"
                   barGap={6}
                 >
                   <CartesianGrid stroke="#F3F4F6" vertical={false} />
                   <XAxis
                     dataKey="name"
+                    interval={0}
                     axisLine={{ stroke: '#E5E7EB' }}
                     tickLine={false}
-                    tick={{ fill: '#374151', fontSize: 13, fontWeight: 500 }}
+                    tick={{ fill: '#374151', fontSize: 12, fontWeight: 500 }}
                     dy={6}
                   />
                   <YAxis
@@ -244,19 +270,6 @@ export function CompareSchoolsView({
                     />
                   </Bar>
                   <Bar
-                    dataKey="j18"
-                    name="ตาม จ.18 คำนวณ"
-                    fill="#64748B"
-                    radius={[4, 4, 0, 0]}
-                    maxBarSize={64}
-                  >
-                    <LabelList
-                      dataKey="j18"
-                      position="top"
-                      style={{ fill: '#475569', fontSize: 13, fontWeight: 600 }}
-                    />
-                  </Bar>
-                  <Bar
                     dataKey="criteria"
                     name="ตามเกณฑ์ ก.ค.ศ."
                     fill="#CBD5E1"
@@ -279,10 +292,6 @@ export function CompareSchoolsView({
                 <span>คนครองจริง</span>
               </span>
               <span className="inline-flex items-center gap-2">
-                <span className="h-3 w-3 rounded-xs bg-[#64748B]" aria-hidden="true" />
-                <span>ตาม จ.18 คำนวณ</span>
-              </span>
-              <span className="inline-flex items-center gap-2">
                 <span className="h-3 w-3 rounded-xs bg-[#CBD5E1]" aria-hidden="true" />
                 <span>ตามเกณฑ์ ก.ค.ศ.</span>
               </span>
@@ -301,13 +310,13 @@ export function CompareSchoolsView({
               <table className="w-full border-collapse text-left text-sm">
                 <thead>
                   <tr className="border-b border-[#E5E7EB] bg-[#F9FAFB]">
-                    <th className="min-w-[200px] py-3.5 pl-6 pr-4 font-semibold text-[#374151]">
+                    <th className="min-w-[190px] py-3.5 pl-6 pr-4 font-semibold text-[#374151]">
                       รายการเปรียบเทียบ
                     </th>
                     {selectedSchools.map((s) => (
                       <th
                         key={s.school_code}
-                        className="min-w-[200px] px-4 py-3.5 font-semibold text-[#111827]"
+                        className="min-w-[170px] px-4 py-3.5 font-semibold text-[#111827]"
                       >
                         <div>{s.school_name}</div>
                         <div className="mt-0.5 font-mono-num text-[13px] font-normal text-[#6B7280]">
@@ -424,15 +433,6 @@ export function CompareSchoolsView({
                       <td key={s.school_code} className="px-4 py-3 font-mono-num text-[#4B5563]">
                         {s.j18_paid_director} / {s.j18_paid_deputy} / {s.j18_paid_teacher} (รวม{' '}
                         {s.j18_paid_total})
-                      </td>
-                    ))}
-                  </tr>
-                  <tr>
-                    <td className="py-3 pl-6 pr-4 text-[#6B7280]">ตาม จ.18 (คำนวณอัตรา)</td>
-                    {selectedSchools.map((s) => (
-                      <td key={s.school_code} className="px-4 py-3 font-mono-num text-[#4B5563]">
-                        {s.j18_calc_director} / {s.j18_calc_deputy} / {s.j18_calc_teacher} (รวม{' '}
-                        {s.j18_calc_total})
                       </td>
                     ))}
                   </tr>

@@ -190,7 +190,7 @@ export default function App() {
   function handleToggleCompareCode(code: string) {
     setCompareSchoolCodes((prev) => {
       if (prev.includes(code)) return prev.filter((c) => c !== code);
-      if (prev.length >= 4) return prev;
+      if (prev.length >= 6) return prev;
       return [...prev, code];
     });
   }
@@ -353,7 +353,11 @@ export default function App() {
             {activeTab === 'schools' && (
               <SchoolsTableView
                 records={filteredRecords}
+                totalPeriodRecords={records.length}
                 periodLabel={currentPeriodLabel}
+                districts={districts}
+                selectedDistrict={selectedDistrict}
+                onSelectDistrict={setSelectedDistrict}
                 onSelectSchool={setSelectedSchool}
                 compareCodes={compareSchoolCodes}
                 onToggleCompareCode={handleToggleCompareCode}
@@ -364,6 +368,9 @@ export default function App() {
             {activeTab === 'compare-schools' && (
               <CompareSchoolsView
                 allRecords={records}
+                districts={districts}
+                selectedDistrict={selectedDistrict}
+                onSelectDistrict={setSelectedDistrict}
                 selectedSchoolCodes={compareSchoolCodes}
                 onChangeSelectedCodes={setCompareSchoolCodes}
                 periodLabel={currentPeriodLabel}

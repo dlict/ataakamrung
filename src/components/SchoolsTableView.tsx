@@ -13,7 +13,11 @@ import {
 
 interface SchoolsTableViewProps {
   records: SchoolStaffingRecord[];
+  totalPeriodRecords: number;
   periodLabel: string;
+  districts: string[];
+  selectedDistrict: string;
+  onSelectDistrict: (district: string) => void;
   onSelectSchool: (school: SchoolStaffingRecord) => void;
   compareCodes: string[];
   onToggleCompareCode: (schoolCode: string) => void;
@@ -42,7 +46,11 @@ type SortField =
 
 export function SchoolsTableView({
   records,
+  totalPeriodRecords,
   periodLabel,
+  districts,
+  selectedDistrict,
+  onSelectDistrict,
   onSelectSchool,
   compareCodes,
   onToggleCompareCode,
@@ -184,7 +192,7 @@ export function SchoolsTableView({
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h1 className="text-lg font-semibold text-[#111827]">
-              ข้อมูลรายโรงเรียน ({formatNumber(filtered.length)} จาก {formatNumber(records.length)} แห่ง)
+              ข้อมูลรายโรงเรียน ({formatNumber(filtered.length)} จาก {formatNumber(totalPeriodRecords)} แห่ง)
             </h1>
             <p className="mt-0.5 text-sm text-[#6B7280]">
               งวด {periodLabel} · คลิกที่รายการเพื่อเปิดรายละเอียดครบทุกตำแหน่ง
@@ -197,7 +205,7 @@ export function SchoolsTableView({
                 onClick={onGoToCompare}
                 className="inline-flex h-10 items-center justify-center rounded-md bg-[#1E3A8A] px-3.5 text-sm font-medium text-white transition-colors hover:bg-[#1E40AF] whitespace-nowrap shrink-0"
               >
-                <span>เปรียบเทียบ ({compareCodes.length}/4 แห่ง)</span>
+                <span>เปรียบเทียบ ({compareCodes.length}/6 แห่ง)</span>
               </button>
             )}
             <button
@@ -213,8 +221,8 @@ export function SchoolsTableView({
         </div>
 
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-          {/* Search + Status */}
-          <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center">
+          {/* Search + District + Status */}
+          <div className="flex flex-col gap-2.5 sm:flex-row sm:flex-wrap sm:items-center">
             <div className="relative">
               <Search
                 className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#9CA3AF]"
@@ -225,9 +233,23 @@ export function SchoolsTableView({
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="ค้นหาชื่อโรงเรียน รหัส หรือตำบล..."
-                className="h-10 w-full rounded-md border border-[#D1D5DB] bg-white pl-9 pr-3 text-sm text-[#111827] placeholder:text-[#9CA3AF] focus:border-[#1E3A8A] focus:outline-none sm:w-72"
+                className="h-10 w-full rounded-md border border-[#D1D5DB] bg-white pl-9 pr-3 text-sm text-[#111827] placeholder:text-[#9CA3AF] focus:border-[#1E3A8A] focus:outline-none sm:w-64"
               />
             </div>
+
+            <select
+              aria-label="กรองตามอำเภอในตารางโรงเรียน"
+              value={selectedDistrict}
+              onChange={(e) => onSelectDistrict(e.target.value)}
+              className="h-10 rounded-md border border-[#D1D5DB] bg-white px-3 text-sm text-[#111827] focus:border-[#1E3A8A] focus:outline-none"
+            >
+              <option value="all">ทุกอำเภอ</option>
+              {districts.map((d) => (
+                <option key={d} value={d}>
+                  อ.{d}
+                </option>
+              ))}
+            </select>
 
             <select
               aria-label="กรองสถานะอัตรากำลัง"
@@ -409,7 +431,7 @@ export function SchoolsTableView({
               <tbody className="divide-y divide-[#F3F4F6]">
                 {filtered.map((r) => {
                   const isChecked = compareCodes.includes(r.school_code);
-                  const disableNew = !isChecked && compareCodes.length >= 4;
+                  const disableNew = !isChecked && compareCodes.length >= 6;
                   return (
                   <tr
                     key={r.school_code}
