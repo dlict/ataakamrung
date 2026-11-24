@@ -11,6 +11,7 @@ import {
   type ParsedCsvResult,
 } from '../utils/csvParser';
 import { formatNumber, formatPercent, formatSigned, getDiffToneClass } from '../utils/formatters';
+import { parseJsonResponse } from '../utils/api';
 
 interface UploadModalProps {
   isOpen: boolean;
@@ -91,15 +92,15 @@ export function UploadModal({
           records: parsed.records,
         }),
       });
-      const data = await response.json();
-      if (!response.ok) {
+      const data = await parseJsonResponse<{ period?: ReportPeriod; error?: string }>(response);
+      if (!response.ok || !data.period) {
         throw new Error(data.error || 'บันทึกข้อมูลไม่สำเร็จ');
       }
       setParsed(null);
       setFilename('');
       setPeriodNote('');
       setOverwrite(false);
-      onSuccess(data.period as ReportPeriod);
+      onSuccess(data.period);
     } catch (err) {
       setSubmitError(err instanceof Error ? err.message : 'บันทึกข้อมูลไม่สำเร็จ');
     } finally {

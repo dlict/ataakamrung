@@ -6,6 +6,7 @@ import type {
   SupabaseStatus,
 } from '../types/staffing';
 import { formatNumber, formatPercent, formatSigned, getDiffToneClass } from '../utils/formatters';
+import { parseJsonResponse } from '../utils/api';
 
 interface ComparePeriodsViewProps {
   periods: ReportPeriod[];
@@ -95,8 +96,12 @@ export function ComparePeriodsView({
     setLoadingCompare(true);
 
     Promise.all([
-      fetch(`/api/periods/${periodAId}/records`).then((r) => r.json()),
-      fetch(`/api/periods/${periodBId}/records`).then((r) => r.json()),
+      fetch(`/api/periods/${periodAId}/records`).then((r) =>
+        parseJsonResponse<{ records?: SchoolStaffingRecord[] }>(r)
+      ),
+      fetch(`/api/periods/${periodBId}/records`).then((r) =>
+        parseJsonResponse<{ records?: SchoolStaffingRecord[] }>(r)
+      ),
     ])
       .then(([resA, resB]) => {
         if (!active) return;

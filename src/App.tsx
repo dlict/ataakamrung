@@ -18,6 +18,7 @@ import {
   computeDistrictBreakdown,
   computeSummaryFromRecords,
 } from './utils/csvParser';
+import { parseJsonResponse } from './utils/api';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<ActiveTab>('overview');
@@ -46,11 +47,11 @@ export default function App() {
         fetch('/api/status'),
         fetch('/api/periods'),
       ]);
-      const statusData = (await statusRes.json()) as SupabaseStatus;
-      const periodsData = (await periodsRes.json()) as {
+      const statusData = await parseJsonResponse<SupabaseStatus>(statusRes);
+      const periodsData = await parseJsonResponse<{
         periods?: ReportPeriod[];
         error?: string;
-      };
+      }>(periodsRes);
 
       if (!periodsRes.ok) {
         throw new Error(periodsData.error || 'ไม่สามารถโหลดข้อมูลได้');
@@ -91,9 +92,11 @@ export default function App() {
 
     fetch(`/api/periods/${selectedPeriodId}/records`)
       .then(async (res) => {
-        const data = await res.json();
+        const data = await parseJsonResponse<{ records: SchoolStaffingRecord[]; error?: string }>(
+          res
+        );
         if (!res.ok) throw new Error(data.error || 'โหลดข้อมูลโรงเรียนไม่สำเร็จ');
-        return data as { records: SchoolStaffingRecord[] };
+        return data;
       })
       .then((data) => {
         if (!active) return;
@@ -197,7 +200,7 @@ export default function App() {
 
   async function handleDeletePeriod(periodId: string) {
     const res = await fetch(`/api/periods/${periodId}`, { method: 'DELETE' });
-    const data = await res.json();
+    const data = await parseJsonResponse<{ ok?: boolean; error?: string }>(res);
     if (!res.ok) {
       setErrorMessage(data.error || 'ไม่สามารถลบงวดข้อมูลได้');
       return;
@@ -208,7 +211,7 @@ export default function App() {
 
   async function handleDeleteYear(buddhistYear: number) {
     const res = await fetch(`/api/years/${buddhistYear}`, { method: 'DELETE' });
-    const data = await res.json();
+    const data = await parseJsonResponse<{ ok?: boolean; error?: string }>(res);
     if (!res.ok) {
       setErrorMessage(data.error || 'ไม่สามารถลบข้อมูลรายปีได้');
       return;
@@ -219,7 +222,7 @@ export default function App() {
 
   async function handleDeleteAllPeriods() {
     const res = await fetch('/api/periods', { method: 'DELETE' });
-    const data = await res.json();
+    const data = await parseJsonResponse<{ ok?: boolean; error?: string }>(res);
     if (!res.ok) {
       setErrorMessage(data.error || 'ไม่สามารถลบข้อมูลทั้งหมดได้');
       return;

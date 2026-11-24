@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Check, Copy, X } from 'lucide-react';
 import type { SupabaseStatus } from '../types/staffing';
+import { parseJsonResponse } from '../utils/api';
 
 interface SupabaseSetupDrawerProps {
   isOpen: boolean;
@@ -21,7 +22,7 @@ export function SupabaseSetupDrawer({
   useEffect(() => {
     if (!isOpen) return;
     fetch('/api/schema-sql')
-      .then((r) => r.json())
+      .then((r) => parseJsonResponse<{ sql?: string }>(r))
       .then((data) => {
         if (typeof data.sql === 'string') setSchemaSql(data.sql);
       })
@@ -101,7 +102,7 @@ export function SupabaseSetupDrawer({
             </h3>
             <p className="text-[#4B5563] leading-relaxed">
               เพื่อความปลอดภัยสูงสุด คีย์เชื่อมต่อฐานข้อมูลจะถูกอ่านจากฝั่งเซิร์ฟเวอร์เท่านั้น กรุณากำหนดค่าตัวแปรในเมนู
-              Secrets ของโปรเจกต์:
+              Secrets ของโปรเจกต์ (หรือใน Vercel: Project Settings → Environment Variables แล้ว Redeploy):
             </p>
             <div className="rounded-md border border-[#E5E7EB] bg-[#F9FAFB] p-3 font-mono-num text-[13px] text-[#111827]">
               <div>SUPABASE_URL=https://your-project.supabase.co</div>
