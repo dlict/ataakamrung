@@ -16,7 +16,7 @@ const NAV_ITEMS: { id: ActiveTab; label: string }[] = [
 
 export function TopBar({ activeTab, onTabChange, onOpenUpload }: TopBarProps) {
   return (
-    <header className="sticky top-0 z-30 border-b border-[#E5E7EB] bg-white/95 backdrop-blur-sm">
+    <header className="sticky top-0 z-30 border-b border-[#E5E7EB] bg-white/95 backdrop-blur-sm print:hidden">
       <div className="mx-auto flex h-16 max-w-[1360px] items-center justify-between gap-4 px-4 sm:gap-8 sm:px-6 lg:px-8">
         <button
           type="button"

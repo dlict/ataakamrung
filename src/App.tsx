@@ -237,7 +237,7 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col bg-[#F8F9FA] text-[#111827]">
+    <div className="min-h-screen flex flex-col bg-[#F8F9FA] text-[#111827] print:bg-white">
       <TopBar
         activeTab={activeTab}
         onTabChange={setActiveTab}
@@ -265,10 +265,10 @@ export default function App() {
         />
       )}
 
-      <main className="mx-auto w-full max-w-[1360px] flex-1 px-4 py-6 sm:px-6 lg:px-8">
+      <main className="mx-auto w-full max-w-[1360px] flex-1 px-4 py-6 sm:px-6 lg:px-8 print:max-w-none print:px-0 print:py-0">
         {/* Discreet Supabase setup notice only when not yet connected */}
         {supabaseStatus && !supabaseStatus.tablesReady && (
-          <div className="mb-6 flex flex-col gap-2 rounded-lg border border-[#E5E7EB] bg-white px-4 py-3.5 text-sm sm:flex-row sm:items-center sm:justify-between">
+          <div className="mb-6 flex flex-col gap-2 rounded-lg border border-[#E5E7EB] bg-white px-4 py-3.5 text-sm sm:flex-row sm:items-center sm:justify-between print:hidden">
             <p className="text-[#4B5563]">
               <strong className="font-semibold text-[#111827]">สถานะฐานข้อมูล:</strong>{' '}
               {supabaseStatus.message}
@@ -284,7 +284,7 @@ export default function App() {
         )}
 
         {errorMessage && (
-          <div className="mb-6 flex items-center justify-between gap-4 rounded-lg border border-[#FECACA] bg-[#FEF2F2] px-4 py-3.5 text-sm text-[#B91C1C]">
+          <div className="mb-6 flex items-center justify-between gap-4 rounded-lg border border-[#FECACA] bg-[#FEF2F2] px-4 py-3.5 text-sm text-[#B91C1C] print:hidden">
             <span>{errorMessage}</span>
             <button
               type="button"
@@ -395,7 +395,7 @@ export default function App() {
         )}
       </main>
 
-      <footer className="border-t border-[#E5E7EB] bg-white">
+      <footer className="border-t border-[#E5E7EB] bg-white print:hidden">
         <div className="mx-auto flex max-w-[1360px] flex-col gap-1 px-4 py-4 text-sm text-[#6B7280] sm:flex-row sm:items-center sm:justify-between sm:px-6 lg:px-8">
           <span>ข้อมูลอัตรากำลังข้าราชการครูและบุคลากรทางการศึกษา · สพป.แม่ฮ่องสอน เขต 1</span>
           <span>เกณฑ์เปรียบเทียบตาม จ.18 คำนวณอัตรา และเกณฑ์ ก.ค.ศ.</span>

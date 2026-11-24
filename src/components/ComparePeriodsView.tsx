@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Trash2, Upload } from 'lucide-react';
+import { Printer, Trash2, Upload } from 'lucide-react';
 import type {
   ReportPeriod,
   SchoolStaffingRecord,
@@ -189,9 +189,39 @@ export function ComparePeriodsView({
 
   return (
     <div className="space-y-6">
+      {/* Print-only Header */}
+      <header className="hidden border-b-2 border-[#111827] pb-3 print:block">
+        <div className="flex items-end justify-between gap-4">
+          <div>
+            <p className="text-xs font-medium text-[#4B5563]">
+              สำนักงานเขตพื้นที่การศึกษาประถมศึกษาแม่ฮ่องสอน เขต 1
+            </p>
+            <h1 className="mt-0.5 text-lg font-bold text-[#111827]">
+              รายงานคลังงวดข้อมูลและเปรียบเทียบความเปลี่ยนแปลงอัตรากำลัง
+            </h1>
+          </div>
+          <div className="text-right text-xs text-[#4B5563]">
+            {periodA && periodB && (
+              <p>
+                เปรียบเทียบ: {periodA.month_label} {periodA.buddhist_year} → {periodB.month_label}{' '}
+                {periodB.buddhist_year}
+              </p>
+            )}
+            <p>
+              พิมพ์เมื่อ:{' '}
+              {new Date().toLocaleDateString('th-TH', {
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric',
+              })}
+            </p>
+          </div>
+        </div>
+      </header>
+
       {/* Year-level Management */}
       {yearsSummary.length > 0 && (
-        <section className="rounded-lg border border-[#E5E7EB] bg-white p-5 sm:p-6">
+        <section className="rounded-lg border border-[#E5E7EB] bg-white p-5 sm:p-6 print:hidden">
           <div className="flex flex-col gap-3 border-b border-[#F3F4F6] pb-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <h2 className="text-lg font-semibold text-[#111827]">
@@ -292,68 +322,80 @@ export function ComparePeriodsView({
       )}
 
       {/* Period Archive Table */}
-      <section className="rounded-lg border border-[#E5E7EB] bg-white">
-        <div className="flex flex-col gap-3 border-b border-[#E5E7EB] p-5 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+      <section className="print-avoid-break rounded-lg border border-[#E5E7EB] bg-white print:border-[#D1D5DB]">
+        <div className="flex flex-col gap-3 border-b border-[#E5E7EB] p-5 sm:flex-row sm:items-center sm:justify-between sm:px-6 print:px-4 print:py-3">
           <div>
-            <h1 className="text-lg font-semibold text-[#111827]">
+            <h1 className="text-lg font-semibold text-[#111827] print:text-base">
               คลังงวดข้อมูลตามช่วงเวลา (พ.ศ. / เดือน)
             </h1>
-            <p className="mt-0.5 text-sm text-[#6B7280]">
+            <p className="mt-0.5 text-sm text-[#6B7280] print:text-xs">
               บันทึกทั้งหมด {formatNumber(periods.length)} งวด
               {supabaseStatus?.tablesReady ? ' ในฐานข้อมูล Supabase' : ' (โหมดข้อมูลตั้งต้น)'}
             </p>
           </div>
-          <button
-            type="button"
-            onClick={onOpenUpload}
-            className="inline-flex h-10 items-center justify-center gap-1.5 rounded-md border border-[#D1D5DB] bg-white px-3.5 text-sm font-medium text-[#111827] transition-colors hover:bg-[#F9FAFB] whitespace-nowrap shrink-0"
-          >
-            <Upload className="h-4 w-4 text-[#6B7280]" aria-hidden="true" />
-            <span>เพิ่มงวดข้อมูลใหม่</span>
-          </button>
+          <div className="flex flex-wrap items-center gap-2 print:hidden">
+            {periods.length > 0 && (
+              <button
+                type="button"
+                onClick={() => window.print()}
+                className="inline-flex h-10 items-center justify-center gap-1.5 rounded-md border border-[#D1D5DB] bg-white px-3.5 text-sm font-medium text-[#111827] transition-colors hover:bg-[#F9FAFB] whitespace-nowrap shrink-0"
+              >
+                <Printer className="h-4 w-4 text-[#4B5563]" aria-hidden="true" />
+                <span>พิมพ์รายงาน</span>
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={onOpenUpload}
+              className="inline-flex h-10 items-center justify-center gap-1.5 rounded-md border border-[#D1D5DB] bg-white px-3.5 text-sm font-medium text-[#111827] transition-colors hover:bg-[#F9FAFB] whitespace-nowrap shrink-0"
+            >
+              <Upload className="h-4 w-4 text-[#6B7280]" aria-hidden="true" />
+              <span>เพิ่มงวดข้อมูลใหม่</span>
+            </button>
+          </div>
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full border-collapse text-left text-sm">
+        <div className="overflow-x-auto print:overflow-visible">
+          <table className="w-full border-collapse text-left text-sm print:text-xs">
             <thead>
-              <tr className="border-b border-[#E5E7EB] bg-[#F9FAFB] text-[13px] text-[#6B7280]">
-                <th className="py-3 pl-6 pr-3 font-medium">พ.ศ. / เดือน</th>
-                <th className="hidden md:table-cell px-3 py-3 font-medium">คำอธิบาย / ชื่อไฟล์</th>
+              <tr className="border-b border-[#E5E7EB] bg-[#F9FAFB] text-[13px] text-[#6B7280] print:text-xs">
+                <th className="py-3 pl-6 pr-3 font-medium print:pl-4">พ.ศ. / เดือน</th>
+                <th className="hidden md:table-cell px-3 py-3 font-medium print:table-cell">คำอธิบาย / ชื่อไฟล์</th>
                 <th className="px-3 py-3 text-right font-medium">โรงเรียน</th>
                 <th className="px-3 py-3 text-right font-medium">นักเรียน</th>
                 <th className="px-3 py-3 text-right font-medium">คนครอง / เกณฑ์</th>
                 <th className="px-3 py-3 text-right font-medium">ดุลขาด/เกิน</th>
-                <th className="py-3 pl-3 pr-6 text-right font-medium">จัดการ</th>
+                <th className="py-3 pl-3 pr-6 text-right font-medium print:hidden">จัดการ</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[#F3F4F6]">
               {periods.map((p) => (
                 <tr key={p.id} className="hover:bg-[#F9FAFB]">
-                  <td className="py-3.5 pl-6 pr-3 font-medium text-[#111827] whitespace-nowrap">
+                  <td className="py-3.5 pl-6 pr-3 font-medium text-[#111827] whitespace-nowrap print:pl-4 print:py-2">
                     {p.month_label} {p.buddhist_year}
                   </td>
-                  <td className="hidden md:table-cell px-3 py-3.5 text-[#4B5563]">
+                  <td className="hidden md:table-cell px-3 py-3.5 text-[#4B5563] print:table-cell print:py-2">
                     <div className="truncate max-w-[260px]">
                       {p.period_note || p.source_filename}
                     </div>
                   </td>
-                  <td className="px-3 py-3.5 text-right font-mono-num text-[#111827]">
+                  <td className="px-3 py-3.5 text-right font-mono-num text-[#111827] print:py-2">
                     {formatNumber(p.total_schools)}
                   </td>
-                  <td className="px-3 py-3.5 text-right font-mono-num text-[#111827]">
+                  <td className="px-3 py-3.5 text-right font-mono-num text-[#111827] print:py-2">
                     {formatNumber(p.total_students)}
                   </td>
-                  <td className="px-3 py-3.5 text-right font-mono-num text-[#4B5563] whitespace-nowrap">
+                  <td className="px-3 py-3.5 text-right font-mono-num text-[#4B5563] whitespace-nowrap print:py-2">
                     {formatNumber(p.total_actual_staff)} / {formatNumber(p.total_criteria)}
                   </td>
                   <td
-                    className={`px-3 py-3.5 text-right font-mono-num font-semibold whitespace-nowrap ${getDiffToneClass(
+                    className={`px-3 py-3.5 text-right font-mono-num font-semibold whitespace-nowrap print:py-2 ${getDiffToneClass(
                       p.net_diff
                     )}`}
                   >
                     {formatSigned(p.net_diff)} ({formatPercent(p.net_diff_pct)})
                   </td>
-                  <td className="py-3.5 pl-3 pr-6 text-right whitespace-nowrap">
+                  <td className="py-3.5 pl-3 pr-6 text-right whitespace-nowrap print:hidden">
                     <div className="inline-flex items-center gap-3">
                       <button
                         type="button"
@@ -405,7 +447,7 @@ export function ComparePeriodsView({
 
       {/* Multi-period Comparison Section */}
       {chronological.length < 2 ? (
-        <section className="rounded-lg border border-dashed border-[#D1D5DB] bg-white p-8 text-center">
+        <section className="rounded-lg border border-dashed border-[#D1D5DB] bg-white p-8 text-center print:hidden">
           <h2 className="text-base font-semibold text-[#111827]">
             อัปโหลดข้อมูลอย่างน้อย 2 งวด เพื่อเปรียบเทียบความเปลี่ยนแปลงรายเดือน/รายปี
           </h2>
@@ -423,18 +465,18 @@ export function ComparePeriodsView({
           </button>
         </section>
       ) : (
-        <section className="rounded-lg border border-[#E5E7EB] bg-white p-5 sm:p-6">
-          <div className="flex flex-col gap-4 border-b border-[#E5E7EB] pb-5 lg:flex-row lg:items-center lg:justify-between">
+        <section className="rounded-lg border border-[#E5E7EB] bg-white p-5 sm:p-6 print:border-[#D1D5DB] print:p-4">
+          <div className="flex flex-col gap-4 border-b border-[#E5E7EB] pb-5 lg:flex-row lg:items-center lg:justify-between print:pb-3">
             <div>
-              <h2 className="text-lg font-semibold text-[#111827]">
+              <h2 className="text-lg font-semibold text-[#111827] print:text-base">
                 เปรียบเทียบการเปลี่ยนแปลงระหว่างงวด
               </h2>
-              <p className="mt-0.5 text-sm text-[#6B7280]">
+              <p className="mt-0.5 text-sm text-[#6B7280] print:text-xs">
                 แสดงรายการโรงเรียนที่มีการเปลี่ยนแปลงจำนวนนักเรียน ครูมีตัวจริง หรือดุลขาด/เกิน
               </p>
             </div>
 
-            <div className="flex flex-wrap items-center gap-2 text-sm">
+            <div className="flex flex-wrap items-center gap-2 text-sm print:hidden">
               <select
                 aria-label="เลือกงวดตั้งต้น A"
                 value={periodAId}
@@ -460,7 +502,22 @@ export function ComparePeriodsView({
                   </option>
                 ))}
               </select>
+              <button
+                type="button"
+                onClick={() => window.print()}
+                className="inline-flex h-10 items-center justify-center gap-1.5 rounded-md border border-[#D1D5DB] bg-white px-3.5 text-sm font-medium text-[#111827] transition-colors hover:bg-[#F9FAFB] whitespace-nowrap shrink-0"
+              >
+                <Printer className="h-4 w-4 text-[#4B5563]" aria-hidden="true" />
+                <span>พิมพ์รายงาน</span>
+              </button>
             </div>
+
+            {periodA && periodB && (
+              <div className="hidden text-xs font-medium text-[#111827] print:block">
+                งวด A: {periodA.month_label} {periodA.buddhist_year} เทียบกับ งวด B:{' '}
+                {periodB.month_label} {periodB.buddhist_year}
+              </div>
+            )}
           </div>
 
           {periodA && periodB && (
@@ -507,8 +564,8 @@ export function ComparePeriodsView({
                 ไม่พบความแตกต่างระหว่างสองงวดที่เลือก
               </p>
             ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full border-collapse text-left text-sm">
+              <div className="overflow-x-auto print:overflow-visible">
+                <table className="w-full border-collapse text-left text-sm print:text-xs [&_td]:print:py-1.5">
                   <thead>
                     <tr className="border-b border-[#E5E7EB] bg-[#F9FAFB] text-[13px] text-[#6B7280]">
                       <th className="py-3 pr-3 font-medium">รหัส · โรงเรียน</th>

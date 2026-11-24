@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Plus, Search, X } from 'lucide-react';
+import { Plus, Printer, Search, X } from 'lucide-react';
 import {
   Bar,
   BarChart,
@@ -98,8 +98,35 @@ export function CompareSchoolsView({
 
   return (
     <div className="space-y-6">
+      {/* Print-only Header */}
+      {selectedSchools.length > 0 && (
+        <header className="hidden border-b-2 border-[#111827] pb-3 print:block">
+          <div className="flex items-end justify-between gap-4">
+            <div>
+              <p className="text-xs font-medium text-[#4B5563]">
+                สำนักงานเขตพื้นที่การศึกษาประถมศึกษาแม่ฮ่องสอน เขต 1
+              </p>
+              <h1 className="mt-0.5 text-lg font-bold text-[#111827]">
+                รายงานเปรียบเทียบข้อมูลอัตรากำลังรายโรงเรียน ({selectedSchools.length} แห่ง)
+              </h1>
+            </div>
+            <div className="text-right text-xs text-[#4B5563]">
+              <p>งวดข้อมูล: {periodLabel}</p>
+              <p>
+                พิมพ์เมื่อ:{' '}
+                {new Date().toLocaleDateString('th-TH', {
+                  year: 'numeric',
+                  month: 'long',
+                  day: 'numeric',
+                })}
+              </p>
+            </div>
+          </div>
+        </header>
+      )}
+
       {/* Selector Card */}
-      <section className="rounded-lg border border-[#E5E7EB] bg-white p-5 sm:p-6">
+      <section className="rounded-lg border border-[#E5E7EB] bg-white p-5 sm:p-6 print:hidden">
         <div className="flex flex-col gap-3 border-b border-[#F3F4F6] pb-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h1 className="text-lg font-semibold text-[#111827]">
@@ -110,13 +137,23 @@ export function CompareSchoolsView({
             </p>
           </div>
           {selectedSchools.length > 0 && (
-            <button
-              type="button"
-              onClick={clearAll}
-              className="self-start text-sm font-medium text-[#6B7280] hover:text-[#111827] sm:self-auto whitespace-nowrap shrink-0"
-            >
-              ล้างรายการที่เลือก
-            </button>
+            <div className="flex flex-wrap items-center gap-3 self-start sm:self-auto shrink-0">
+              <button
+                type="button"
+                onClick={() => window.print()}
+                className="inline-flex h-9 items-center gap-1.5 rounded-md border border-[#D1D5DB] bg-white px-3 text-sm font-medium text-[#111827] transition-colors hover:bg-[#F9FAFB] whitespace-nowrap"
+              >
+                <Printer className="h-4 w-4 text-[#4B5563]" aria-hidden="true" />
+                <span>พิมพ์รายงาน</span>
+              </button>
+              <button
+                type="button"
+                onClick={clearAll}
+                className="text-sm font-medium text-[#6B7280] hover:text-[#111827] whitespace-nowrap"
+              >
+                ล้างรายการที่เลือก
+              </button>
+            </div>
           )}
         </div>
 
@@ -216,17 +253,17 @@ export function CompareSchoolsView({
       ) : (
         <>
           {/* Recharts Bar Comparison */}
-          <section className="rounded-lg border border-[#E5E7EB] bg-white p-5 sm:p-6">
-            <div className="border-b border-[#F3F4F6] pb-4">
-              <h2 className="text-lg font-semibold text-[#111827]">
+          <section className="print-avoid-break rounded-lg border border-[#E5E7EB] bg-white p-5 sm:p-6 print:border-[#D1D5DB] print:p-4">
+            <div className="border-b border-[#F3F4F6] pb-4 print:pb-2.5">
+              <h2 className="text-lg font-semibold text-[#111827] print:text-base">
                 กราฟเปรียบเทียบอัตรากำลังรวม (คนครองจริง · เกณฑ์ ก.ค.ศ.)
               </h2>
-              <p className="mt-0.5 text-sm text-[#6B7280]">
+              <p className="mt-0.5 text-sm text-[#6B7280] print:text-xs">
                 เปรียบเทียบจำนวนบุคลากรจริงกับเกณฑ์ ก.ค.ศ. ของโรงเรียนที่เลือก
               </p>
             </div>
 
-            <div className="mt-5 h-[350px] w-full">
+            <div className="mt-5 h-[350px] w-full print:mt-3 print:h-[240px]">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart
                   data={chartData}
@@ -299,27 +336,27 @@ export function CompareSchoolsView({
           </section>
 
           {/* Detailed Side-by-Side Comparison Matrix */}
-          <section className="rounded-lg border border-[#E5E7EB] bg-white overflow-hidden">
-            <div className="border-b border-[#E5E7EB] p-5 sm:px-6">
-              <h2 className="text-lg font-semibold text-[#111827]">
+          <section className="rounded-lg border border-[#E5E7EB] bg-white overflow-hidden print:overflow-visible print:border-[#D1D5DB]">
+            <div className="border-b border-[#E5E7EB] p-5 sm:px-6 print:px-3 print:py-2.5">
+              <h2 className="text-lg font-semibold text-[#111827] print:text-base">
                 ตารางเปรียบเทียบลักษณะโรงเรียนและอัตรากำลังอย่างละเอียด
               </h2>
             </div>
 
-            <div className="overflow-x-auto">
-              <table className="w-full border-collapse text-left text-sm">
+            <div className="overflow-x-auto print:overflow-visible">
+              <table className="w-full border-collapse text-left text-sm print:text-xs [&_td]:print:px-2 [&_td]:print:py-1.5">
                 <thead>
                   <tr className="border-b border-[#E5E7EB] bg-[#F9FAFB]">
-                    <th className="min-w-[190px] py-3.5 pl-6 pr-4 font-semibold text-[#374151]">
+                    <th className="min-w-[190px] py-3.5 pl-6 pr-4 font-semibold text-[#374151] print:min-w-[125px] print:w-[16%] print:py-2 print:pl-2.5 print:pr-2">
                       รายการเปรียบเทียบ
                     </th>
                     {selectedSchools.map((s) => (
                       <th
                         key={s.school_code}
-                        className="min-w-[170px] px-4 py-3.5 font-semibold text-[#111827]"
+                        className="min-w-[170px] px-4 py-3.5 font-semibold text-[#111827] print:min-w-0 print:px-2 print:py-2"
                       >
                         <div>{s.school_name}</div>
-                        <div className="mt-0.5 font-mono-num text-[13px] font-normal text-[#6B7280]">
+                        <div className="mt-0.5 font-mono-num text-[13px] font-normal text-[#6B7280] print:text-[11px]">
                           รหัส {s.school_code}
                         </div>
                       </th>

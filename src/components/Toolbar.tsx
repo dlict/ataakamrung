@@ -43,7 +43,7 @@ export function Toolbar({
   return (
     <section
       aria-label="ตัวกรองและงวดข้อมูล"
-      className="border-b border-[#E5E7EB] bg-white"
+      className="border-b border-[#E5E7EB] bg-white print:hidden"
     >
       <div className="mx-auto flex max-w-[1360px] flex-col gap-3 px-4 py-3.5 sm:px-6 lg:flex-row lg:items-center lg:justify-between lg:px-8">
         <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:flex lg:flex-wrap lg:items-center lg:gap-3.5">
