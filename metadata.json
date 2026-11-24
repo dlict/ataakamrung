@@ -1,0 +1,6 @@
+{
+  "name": "ระบบข้อมูลอัตรากำลัง สพป.แม่ฮ่องสอน เขต 1",
+  "description": "แดชบอร์ดภาพรวมอัตรากำลังครูและข้อมูลนักเรียน รายโรงเรียน รายอำเภอ พร้อมนำเข้าและเปรียบเทียบข้อมูลตามช่วงเวลา พ.ศ. / เดือน บนฐานข้อมูล Supabase",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
