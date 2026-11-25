@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Printer, Trash2, Upload } from 'lucide-react';
+import { Printer, RotateCcw, Trash2, Upload } from 'lucide-react';
 import type {
   ReportPeriod,
   SchoolStaffingRecord,
@@ -7,6 +7,14 @@ import type {
 } from '../types/staffing';
 import { formatNumber, formatPercent, formatSigned, getDiffToneClass } from '../utils/formatters';
 import { parseJsonResponse } from '../utils/api';
+import {
+  calculateActualStaffing,
+  calculateActualStaffingForRecords,
+  DEFAULT_REALITY_FIELDS,
+  formatRealityFormula,
+  REALITY_COMPONENT_OPTIONS,
+  type RealityFieldKey,
+} from '../utils/staffingCalculations';
 
 interface ComparePeriodsViewProps {
   periods: ReportPeriod[];
@@ -26,10 +34,13 @@ interface SchoolDeltaRow {
   studentsB: number;
   actualA: number;
   actualB: number;
+  realityA: number;
+  realityB: number;
   diffA: number;
   diffB: number;
   deltaStudents: number;
   deltaActual: number;
+  deltaReality: number;
   deltaDiff: number;
 }
 
@@ -44,15 +55,37 @@ export function ComparePeriodsView({
 }: ComparePeriodsViewProps) {
   const [periodAId, setPeriodAId] = useState<string>('');
   const [periodBId, setPeriodBId] = useState<string>('');
-  const [recordsA, setRecordsA] = useState<SchoolStaffingRecord[]>([]);
-  const [recordsB, setRecordsB] = useState<SchoolStaffingRecord[]>([]);
-  const [loadingCompare, setLoadingCompare] = useState(false);
+  const [recordsByPeriodId, setRecordsByPeriodId] = useState<
+    Record<string, SchoolStaffingRecord[]>
+  >({});
+  const [loadingPeriodIds, setLoadingPeriodIds] = useState<Record<string, boolean>>({});
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [confirmDeleteYear, setConfirmDeleteYear] = useState<number | null>(null);
   const [deletingYear, setDeletingYear] = useState<number | null>(null);
   const [confirmDeleteAll, setConfirmDeleteAll] = useState(false);
   const [deletingAll, setDeletingAll] = useState(false);
+  const [selectedRealityFields, setSelectedRealityFields] =
+    useState<RealityFieldKey[]>(DEFAULT_REALITY_FIELDS);
+
+  const realityFormulaLabel = useMemo(
+    () => formatRealityFormula(selectedRealityFields),
+    [selectedRealityFields]
+  );
+
+  const isDefaultReality =
+    selectedRealityFields.length === DEFAULT_REALITY_FIELDS.length &&
+    DEFAULT_REALITY_FIELDS.every((k) => selectedRealityFields.includes(k));
+
+  function toggleRealityField(key: RealityFieldKey) {
+    setSelectedRealityFields((prev) =>
+      prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]
+    );
+  }
+
+  function resetRealityFields() {
+    setSelectedRealityFields(DEFAULT_REALITY_FIELDS);
+  }
 
   const chronological = useMemo(
     () =>
@@ -91,39 +124,65 @@ export function ComparePeriodsView({
   }, [chronological]);
 
   useEffect(() => {
-    if (!periodAId || !periodBId || chronological.length < 2) return;
-    let active = true;
-    setLoadingCompare(true);
+    const missingIds = periods
+      .map((p) => p.id)
+      .filter((id) => !(id in recordsByPeriodId) && !loadingPeriodIds[id]);
 
-    Promise.all([
-      fetch(`/api/periods/${periodAId}/records`).then((r) =>
-        parseJsonResponse<{ records?: SchoolStaffingRecord[] }>(r)
-      ),
-      fetch(`/api/periods/${periodBId}/records`).then((r) =>
-        parseJsonResponse<{ records?: SchoolStaffingRecord[] }>(r)
-      ),
-    ])
-      .then(([resA, resB]) => {
-        if (!active) return;
-        setRecordsA(Array.isArray(resA.records) ? resA.records : []);
-        setRecordsB(Array.isArray(resB.records) ? resB.records : []);
-      })
-      .catch(() => {
-        if (!active) return;
-        setRecordsA([]);
-        setRecordsB([]);
-      })
-      .finally(() => {
-        if (active) setLoadingCompare(false);
+    if (missingIds.length === 0) return;
+    let active = true;
+
+    setLoadingPeriodIds((prev) => {
+      const next = { ...prev };
+      for (const id of missingIds) next[id] = true;
+      return next;
+    });
+
+    Promise.all(
+      missingIds.map((id) =>
+        fetch(`/api/periods/${id}/records`)
+          .then((r) => parseJsonResponse<{ records?: SchoolStaffingRecord[] }>(r))
+          .then((res) => ({
+            id,
+            records: Array.isArray(res.records) ? res.records : [],
+          }))
+          .catch(() => ({ id, records: [] as SchoolStaffingRecord[] }))
+      )
+    ).then((results) => {
+      if (!active) return;
+      setRecordsByPeriodId((prev) => {
+        const next = { ...prev };
+        for (const item of results) {
+          next[item.id] = item.records;
+        }
+        return next;
       });
+      setLoadingPeriodIds((prev) => {
+        const next = { ...prev };
+        for (const item of results) {
+          delete next[item.id];
+        }
+        return next;
+      });
+    });
 
     return () => {
       active = false;
     };
-  }, [periodAId, periodBId, chronological.length]);
+  }, [periods, recordsByPeriodId, loadingPeriodIds]);
+
+  const recordsA = recordsByPeriodId[periodAId] ?? [];
+  const recordsB = recordsByPeriodId[periodBId] ?? [];
+  const loadingCompare =
+    Boolean(loadingPeriodIds[periodAId]) || Boolean(loadingPeriodIds[periodBId]);
 
   const periodA = periods.find((p) => p.id === periodAId);
   const periodB = periods.find((p) => p.id === periodBId);
+
+  const periodRealityTotals = useMemo(() => {
+    const totalA = calculateActualStaffingForRecords(recordsA, selectedRealityFields);
+    const totalB = calculateActualStaffingForRecords(recordsB, selectedRealityFields);
+    return { totalA, totalB, delta: totalB - totalA };
+  }, [recordsA, recordsB, selectedRealityFields]);
 
   const deltaRows = useMemo<SchoolDeltaRow[]>(() => {
     if (recordsA.length === 0 || recordsB.length === 0) return [];
@@ -134,10 +193,18 @@ export function ComparePeriodsView({
     for (const b of recordsB) {
       const a = mapA.get(b.school_code);
       if (!a) continue;
+      const realityA = calculateActualStaffing(a, selectedRealityFields);
+      const realityB = calculateActualStaffing(b, selectedRealityFields);
       const deltaStudents = b.students_count - a.students_count;
       const deltaActual = b.actual_total - a.actual_total;
+      const deltaReality = realityB - realityA;
       const deltaDiff = b.diff_total - a.diff_total;
-      if (deltaStudents !== 0 || deltaActual !== 0 || deltaDiff !== 0) {
+      if (
+        deltaStudents !== 0 ||
+        deltaActual !== 0 ||
+        deltaReality !== 0 ||
+        deltaDiff !== 0
+      ) {
         rows.push({
           school_code: b.school_code,
           school_name: b.school_name,
@@ -146,10 +213,13 @@ export function ComparePeriodsView({
           studentsB: b.students_count,
           actualA: a.actual_total,
           actualB: b.actual_total,
+          realityA,
+          realityB,
           diffA: a.diff_total,
           diffB: b.diff_total,
           deltaStudents,
           deltaActual,
+          deltaReality,
           deltaDiff,
         });
       }
@@ -157,10 +227,11 @@ export function ComparePeriodsView({
     return rows.sort(
       (x, y) =>
         Math.abs(y.deltaDiff) - Math.abs(x.deltaDiff) ||
+        Math.abs(y.deltaReality) - Math.abs(x.deltaReality) ||
         Math.abs(y.deltaActual) - Math.abs(x.deltaActual) ||
         Math.abs(y.deltaStudents) - Math.abs(x.deltaStudents)
     );
-  }, [recordsA, recordsB]);
+  }, [recordsA, recordsB, selectedRealityFields]);
 
   async function handleConfirmDelete(id: string) {
     setDeletingId(id);
@@ -204,6 +275,9 @@ export function ComparePeriodsView({
             <h1 className="mt-0.5 text-lg font-bold text-[#111827]">
               รายงานคลังงวดข้อมูลและเปรียบเทียบความเปลี่ยนแปลงอัตรากำลัง
             </h1>
+            <p className="mt-0.5 text-xs text-[#4B5563]">
+              สูตรสภาพจริง: {realityFormulaLabel}
+            </p>
           </div>
           <div className="text-right text-xs text-[#4B5563]">
             {periodA && periodB && (
@@ -360,6 +434,57 @@ export function ComparePeriodsView({
           </div>
         </div>
 
+        {/* Reality Staffing Component Selector */}
+        {periods.length > 0 && (
+          <div className="border-b border-[#E5E7EB] bg-[#F9FAFB]/70 px-5 py-4 sm:px-6 print:hidden">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h2 className="text-sm font-semibold text-[#111827]">
+                  กำหนดองค์ประกอบหัวข้อ “สภาพจริง”
+                </h2>
+                <p className="mt-0.5 text-xs text-[#6B7280]">
+                  สูตรที่เลือกปัจจุบัน:{' '}
+                  <span className="font-medium text-[#0F766E]">{realityFormulaLabel}</span>
+                </p>
+              </div>
+              {!isDefaultReality && (
+                <button
+                  type="button"
+                  onClick={resetRealityFields}
+                  className="inline-flex items-center gap-1.5 self-start text-xs font-medium text-[#6B7280] hover:text-[#111827] sm:self-auto whitespace-nowrap"
+                >
+                  <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" />
+                  <span>คืนค่าเริ่มต้น</span>
+                </button>
+              )}
+            </div>
+
+            <div className="mt-3 flex flex-wrap gap-2">
+              {REALITY_COMPONENT_OPTIONS.map((opt) => {
+                const checked = selectedRealityFields.includes(opt.key);
+                return (
+                  <label
+                    key={opt.key}
+                    className={`inline-flex cursor-pointer items-center gap-2 rounded-md border px-2.5 py-1.5 text-xs transition-colors select-none sm:text-sm ${
+                      checked
+                        ? 'border-[#0F766E] bg-[#F0FDFA] font-medium text-[#0F766E]'
+                        : 'border-[#D1D5DB] bg-white text-[#374151] hover:bg-[#F9FAFB]'
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() => toggleRealityField(opt.key)}
+                      className="h-3.5 w-3.5 rounded border-[#D1D5DB] accent-[#0F766E]"
+                    />
+                    <span>{opt.label}</span>
+                  </label>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
         <div className="overflow-x-auto print:overflow-visible">
           <table className="w-full border-collapse text-left text-sm print:text-xs">
             <thead>
@@ -369,12 +494,19 @@ export function ComparePeriodsView({
                 <th className="px-3 py-3 text-right font-medium">โรงเรียน</th>
                 <th className="px-3 py-3 text-right font-medium">นักเรียน</th>
                 <th className="px-3 py-3 text-right font-medium">คนครอง / เกณฑ์</th>
+                <th className="px-3 py-3 text-right font-medium text-[#0F766E]">สภาพจริง</th>
                 <th className="px-3 py-3 text-right font-medium">ดุลขาด/เกิน</th>
                 <th className="py-3 pl-3 pr-6 text-right font-medium print:hidden">จัดการ</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[#F3F4F6]">
-              {periods.map((p) => (
+              {periods.map((p) => {
+                const periodRecords = recordsByPeriodId[p.id];
+                const isPeriodLoading = Boolean(loadingPeriodIds[p.id]) || !periodRecords;
+                const realityTotal = periodRecords
+                  ? calculateActualStaffingForRecords(periodRecords, selectedRealityFields)
+                  : null;
+                return (
                 <tr key={p.id} className="hover:bg-[#F9FAFB]">
                   <td className="py-3.5 pl-6 pr-3 font-medium text-[#111827] whitespace-nowrap print:pl-4 print:py-2">
                     {p.month_label} {p.buddhist_year}
@@ -392,6 +524,9 @@ export function ComparePeriodsView({
                   </td>
                   <td className="px-3 py-3.5 text-right font-mono-num text-[#4B5563] whitespace-nowrap print:py-2">
                     {formatNumber(p.total_actual_staff)} / {formatNumber(p.total_criteria)}
+                  </td>
+                  <td className="bg-[#F0FDFA]/40 px-3 py-3.5 text-right font-mono-num font-semibold text-[#0F766E] whitespace-nowrap print:py-2">
+                    {isPeriodLoading || realityTotal === null ? '…' : formatNumber(realityTotal)}
                   </td>
                   <td
                     className={`px-3 py-3.5 text-right font-mono-num font-semibold whitespace-nowrap print:py-2 ${getDiffToneClass(
@@ -444,7 +579,8 @@ export function ComparePeriodsView({
                     </div>
                   </td>
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -526,7 +662,7 @@ export function ComparePeriodsView({
           </div>
 
           {periodA && periodB && (
-            <div className="mt-5 grid grid-cols-1 divide-y divide-[#E5E7EB] rounded-md border border-[#E5E7EB] sm:grid-cols-3 sm:divide-x sm:divide-y-0">
+            <div className="mt-5 grid grid-cols-1 divide-y divide-[#E5E7EB] rounded-md border border-[#E5E7EB] sm:grid-cols-2 lg:grid-cols-4 sm:divide-x sm:divide-y-0">
               <div className="p-4">
                 <span className="text-sm text-[#6B7280]">นักเรียนเปลี่ยนแปลง</span>
                 <p className="mt-1 font-mono-num text-xl font-semibold text-[#111827]">
@@ -543,6 +679,22 @@ export function ComparePeriodsView({
                 </p>
                 <p className="mt-0.5 text-[13px] text-[#6B7280] tabular-nums">
                   {formatNumber(periodA.total_actual_staff)} → {formatNumber(periodB.total_actual_staff)}
+                </p>
+              </div>
+              <div className="bg-[#F0FDFA]/50 p-4">
+                <span className="text-sm font-medium text-[#0F766E]">
+                  สภาพจริงเปลี่ยนแปลง
+                </span>
+                <p
+                  className={`mt-1 font-mono-num text-xl font-semibold ${getDiffToneClass(
+                    periodRealityTotals.delta
+                  )}`}
+                >
+                  {formatSigned(periodRealityTotals.delta)} คน
+                </p>
+                <p className="mt-0.5 text-[13px] text-[#4B5563] tabular-nums">
+                  {formatNumber(periodRealityTotals.totalA)} →{' '}
+                  {formatNumber(periodRealityTotals.totalB)} ({realityFormulaLabel})
                 </p>
               </div>
               <div className="p-4">
@@ -576,6 +728,9 @@ export function ComparePeriodsView({
                       <th className="py-3 pr-3 font-medium">รหัส · โรงเรียน</th>
                       <th className="px-3 py-3 text-right font-medium">นร. (เปลี่ยน)</th>
                       <th className="px-3 py-3 text-right font-medium">คนครอง (เปลี่ยน)</th>
+                      <th className="px-3 py-3 text-right font-medium text-[#0F766E]">
+                        สภาพจริง (เปลี่ยน)
+                      </th>
                       <th className="py-3 pl-3 text-right font-medium">ดุลขาด/เกิน (เปลี่ยน)</th>
                     </tr>
                   </thead>
@@ -602,6 +757,14 @@ export function ComparePeriodsView({
                           </span>{' '}
                           <span className={getDiffToneClass(row.deltaActual)}>
                             ({formatSigned(row.deltaActual)})
+                          </span>
+                        </td>
+                        <td className="bg-[#F0FDFA]/40 px-3 py-3 text-right font-mono-num">
+                          <span className="text-[#111827]">
+                            {row.realityA} → {row.realityB}
+                          </span>{' '}
+                          <span className={`font-semibold ${getDiffToneClass(row.deltaReality)}`}>
+                            ({formatSigned(row.deltaReality)})
                           </span>
                         </td>
                         <td className="py-3 pl-3 text-right font-mono-num">

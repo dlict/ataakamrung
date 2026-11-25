@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Plus, Printer, Search, X } from 'lucide-react';
+import { Plus, Printer, RotateCcw, Search, X } from 'lucide-react';
 import {
   Bar,
   BarChart,
@@ -20,6 +20,14 @@ import {
   getDiffLabel,
   getDiffToneClass,
 } from '../utils/formatters';
+import {
+  calculateRealityStaffing,
+  calculateRealityTotal,
+  DEFAULT_REALITY_FIELDS,
+  formatRealityFormula,
+  REALITY_COMPONENT_OPTIONS,
+  type RealityFieldKey,
+} from '../utils/staffingCalculations';
 
 interface CompareSchoolsViewProps {
   allRecords: SchoolStaffingRecord[];
@@ -43,6 +51,27 @@ export function CompareSchoolsView({
   periodLabel,
 }: CompareSchoolsViewProps) {
   const [searchQuery, setSearchQuery] = useState('');
+  const [selectedRealityKeys, setSelectedRealityKeys] =
+    useState<RealityFieldKey[]>(DEFAULT_REALITY_FIELDS);
+
+  const realityFormulaLabel = useMemo(
+    () => formatRealityFormula(selectedRealityKeys),
+    [selectedRealityKeys]
+  );
+
+  const isDefaultReality =
+    selectedRealityKeys.length === DEFAULT_REALITY_FIELDS.length &&
+    DEFAULT_REALITY_FIELDS.every((k) => selectedRealityKeys.includes(k));
+
+  function toggleRealityKey(key: RealityFieldKey) {
+    setSelectedRealityKeys((prev) =>
+      prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]
+    );
+  }
+
+  function resetRealityKeys() {
+    setSelectedRealityKeys(DEFAULT_REALITY_FIELDS);
+  }
 
   const selectedSchools = useMemo(() => {
     const byCode = new Map<string, SchoolStaffingRecord>();
@@ -75,10 +104,11 @@ export function CompareSchoolsView({
       selectedSchools.map((s) => ({
         name: s.school_name,
         actual: s.actual_total,
+        reality: calculateRealityTotal(s, selectedRealityKeys),
         criteria: s.criteria_total,
         diff: s.diff_total,
       })),
-    [selectedSchools]
+    [selectedSchools, selectedRealityKeys]
   );
 
   function addSchool(code: string) {
@@ -109,6 +139,9 @@ export function CompareSchoolsView({
               <h1 className="mt-0.5 text-lg font-bold text-[#111827]">
                 รายงานเปรียบเทียบข้อมูลอัตรากำลังรายโรงเรียน ({selectedSchools.length} แห่ง)
               </h1>
+              <p className="mt-0.5 text-xs text-[#4B5563]">
+                สูตรสภาพจริง: {realityFormulaLabel}
+              </p>
             </div>
             <div className="text-right text-xs text-[#4B5563]">
               <p>งวดข้อมูล: {periodLabel}</p>
@@ -252,14 +285,63 @@ export function CompareSchoolsView({
         </section>
       ) : (
         <>
+          {/* Customizable Reality Staffing Selector */}
+          <section className="rounded-lg border border-[#E5E7EB] bg-white p-5 sm:p-6 print:hidden">
+            <div className="flex flex-col gap-2 border-b border-[#F3F4F6] pb-3.5 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h2 className="text-base font-semibold text-[#111827]">
+                  กำหนดองค์ประกอบหัวข้อ “สภาพจริง”
+                </h2>
+                <p className="mt-0.5 text-sm text-[#6B7280]">
+                  สูตรที่เลือกปัจจุบัน:{' '}
+                  <span className="font-medium text-[#0F766E]">{realityFormulaLabel}</span>
+                </p>
+              </div>
+              {!isDefaultReality && (
+                <button
+                  type="button"
+                  onClick={resetRealityKeys}
+                  className="inline-flex items-center gap-1.5 self-start text-sm font-medium text-[#6B7280] hover:text-[#111827] sm:self-auto whitespace-nowrap"
+                >
+                  <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" />
+                  <span>คืนค่าเริ่มต้น (ครูผู้สอน + พนักงานราชการ)</span>
+                </button>
+              )}
+            </div>
+
+            <div className="mt-3.5 flex flex-wrap gap-2.5">
+              {REALITY_COMPONENT_OPTIONS.map((opt) => {
+                const checked = selectedRealityKeys.includes(opt.key);
+                return (
+                  <label
+                    key={opt.key}
+                    className={`inline-flex cursor-pointer items-center gap-2 rounded-md border px-3 py-2 text-sm transition-colors select-none ${
+                      checked
+                        ? 'border-[#0F766E] bg-[#F0FDFA] font-medium text-[#0F766E]'
+                        : 'border-[#D1D5DB] bg-white text-[#374151] hover:bg-[#F9FAFB]'
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() => toggleRealityKey(opt.key)}
+                      className="h-4 w-4 rounded border-[#D1D5DB] accent-[#0F766E]"
+                    />
+                    <span>{opt.label}</span>
+                  </label>
+                );
+              })}
+            </div>
+          </section>
+
           {/* Recharts Bar Comparison */}
           <section className="print-avoid-break rounded-lg border border-[#E5E7EB] bg-white p-5 sm:p-6 print:border-[#D1D5DB] print:p-4">
             <div className="border-b border-[#F3F4F6] pb-4 print:pb-2.5">
               <h2 className="text-lg font-semibold text-[#111827] print:text-base">
-                กราฟเปรียบเทียบอัตรากำลังรวม (คนครองจริง · เกณฑ์ ก.ค.ศ.)
+                กราฟเปรียบเทียบอัตรากำลังรวม (คนครองจริง · สภาพจริง · เกณฑ์ ก.ค.ศ.)
               </h2>
               <p className="mt-0.5 text-sm text-[#6B7280] print:text-xs">
-                เปรียบเทียบจำนวนบุคลากรจริงกับเกณฑ์ ก.ค.ศ. ของโรงเรียนที่เลือก
+                เปรียบเทียบคนครองจริง สภาพจริง ({realityFormulaLabel}) กับเกณฑ์ ก.ค.ศ. ของโรงเรียนที่เลือก
               </p>
             </div>
 
@@ -268,8 +350,8 @@ export function CompareSchoolsView({
                 <BarChart
                   data={chartData}
                   margin={{ top: 24, right: 16, left: -4, bottom: 12 }}
-                  barCategoryGap="18%"
-                  barGap={6}
+                  barCategoryGap="16%"
+                  barGap={4}
                 >
                   <CartesianGrid stroke="#F3F4F6" vertical={false} />
                   <XAxis
@@ -298,12 +380,25 @@ export function CompareSchoolsView({
                     name="คนครองจริง"
                     fill="#1E3A8A"
                     radius={[4, 4, 0, 0]}
-                    maxBarSize={64}
+                    maxBarSize={48}
                   >
                     <LabelList
                       dataKey="actual"
                       position="top"
-                      style={{ fill: '#1E3A8A', fontSize: 13, fontWeight: 600 }}
+                      style={{ fill: '#1E3A8A', fontSize: 12, fontWeight: 600 }}
+                    />
+                  </Bar>
+                  <Bar
+                    dataKey="reality"
+                    name="สภาพจริง"
+                    fill="#0F766E"
+                    radius={[4, 4, 0, 0]}
+                    maxBarSize={48}
+                  >
+                    <LabelList
+                      dataKey="reality"
+                      position="top"
+                      style={{ fill: '#0F766E', fontSize: 12, fontWeight: 600 }}
                     />
                   </Bar>
                   <Bar
@@ -311,12 +406,12 @@ export function CompareSchoolsView({
                     name="ตามเกณฑ์ ก.ค.ศ."
                     fill="#CBD5E1"
                     radius={[4, 4, 0, 0]}
-                    maxBarSize={64}
+                    maxBarSize={48}
                   >
                     <LabelList
                       dataKey="criteria"
                       position="top"
-                      style={{ fill: '#475569', fontSize: 13, fontWeight: 600 }}
+                      style={{ fill: '#475569', fontSize: 12, fontWeight: 600 }}
                     />
                   </Bar>
                 </BarChart>
@@ -327,6 +422,10 @@ export function CompareSchoolsView({
               <span className="inline-flex items-center gap-2">
                 <span className="h-3 w-3 rounded-xs bg-[#1E3A8A]" aria-hidden="true" />
                 <span>คนครองจริง</span>
+              </span>
+              <span className="inline-flex items-center gap-2">
+                <span className="h-3 w-3 rounded-xs bg-[#0F766E]" aria-hidden="true" />
+                <span>สภาพจริง ({realityFormulaLabel})</span>
               </span>
               <span className="inline-flex items-center gap-2">
                 <span className="h-3 w-3 rounded-xs bg-[#CBD5E1]" aria-hidden="true" />
@@ -513,13 +612,72 @@ export function CompareSchoolsView({
                     })}
                   </tr>
 
+                  {/* Section: สภาพจริง (เลือกองค์ประกอบได้) */}
+                  <tr className="bg-[#F0FDFA]">
+                    <td
+                      colSpan={selectedSchools.length + 1}
+                      className="py-2.5 pl-6 pr-4 text-[13px] font-semibold text-[#0F766E]"
+                    >
+                      4. สภาพจริง ({realityFormulaLabel})
+                    </td>
+                  </tr>
+                  <tr className="bg-[#F0FDFA]/40">
+                    <td className="py-3 pl-6 pr-4 font-medium text-[#111827]">
+                      รวมบุคลากรตามสภาพจริง
+                    </td>
+                    {selectedSchools.map((s) => {
+                      const reality = calculateRealityStaffing(s, selectedRealityKeys);
+                      return (
+                        <td key={s.school_code} className="px-4 py-3 font-mono-num">
+                          <div className="text-base font-bold text-[#0F766E]">
+                            {formatNumber(reality.total)} คน
+                          </div>
+                          <div className="mt-0.5 font-sans text-[12px] text-[#4B5563]">
+                            {reality.breakdownText}
+                          </div>
+                        </td>
+                      );
+                    })}
+                  </tr>
+                  <tr className="bg-[#F0FDFA]/40">
+                    <td className="py-3 pl-6 pr-4 text-[#6B7280]">
+                      ดุลสภาพจริงเทียบเกณฑ์ ก.ค.ศ.
+                    </td>
+                    {selectedSchools.map((s) => {
+                      const reality = calculateRealityStaffing(s, selectedRealityKeys);
+                      return (
+                        <td key={s.school_code} className="px-4 py-3 font-mono-num">
+                          <span className={`font-semibold ${getDiffToneClass(reality.diff)}`}>
+                            {formatSigned(reality.diff)} ({getDiffLabel(reality.diff)})
+                          </span>
+                          <div className="mt-0.5 font-sans text-[12px] text-[#6B7280]">
+                            เทียบ{reality.referenceLabel} {formatNumber(reality.referenceCriteria)} คน
+                          </div>
+                        </td>
+                      );
+                    })}
+                  </tr>
+                  <tr className="bg-[#F0FDFA]/40">
+                    <td className="py-3 pl-6 pr-4 text-[#6B7280]">
+                      อัตราส่วน นร. ต่อ สภาพจริง
+                    </td>
+                    {selectedSchools.map((s) => {
+                      const reality = calculateRealityStaffing(s, selectedRealityKeys);
+                      return (
+                        <td key={s.school_code} className="px-4 py-3 font-mono-num text-[#111827]">
+                          {reality.studentRatio} : 1
+                        </td>
+                      );
+                    })}
+                  </tr>
+
                   {/* Section: เกษียณ & อัตราเสริม */}
                   <tr className="bg-[#F9FAFB]/60">
                     <td
                       colSpan={selectedSchools.length + 1}
                       className="py-2.5 pl-6 pr-4 text-[13px] font-semibold text-[#374151]"
                     >
-                      4. เกษียณอายุราชการและอัตรากำลังเสริม
+                      5. เกษียณอายุราชการและอัตรากำลังเสริม
                     </td>
                   </tr>
                   <tr>
