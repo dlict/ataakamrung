@@ -104,6 +104,9 @@ export interface AggregateSummary {
   actualTeacher: number;
   actualTotal: number;
 
+  j18PaidDirector: number;
+  j18PaidDeputy: number;
+  j18PaidTeacher: number;
   j18PaidTotal: number;
   j18CalcDirector: number;
   j18CalcDeputy: number;
@@ -137,6 +140,15 @@ export interface AggregateSummary {
   royalDecreeTeacher: number;
   contractTeacher: number;
 
+  vacantDirector: number;
+  vacantDeputy: number;
+  vacantTeacher: number;
+  vacantTotal: number;
+  vacantSchools: number;
+  vacantDirectorByJ18Schools: number;
+  vacantDeputyByJ18Schools: number;
+  vacantTeacherByJ18Schools: number;
+
   deficitSchools: number;
   balancedSchools: number;
   surplusSchools: number;
@@ -165,6 +177,11 @@ export interface DistrictSummary {
   diffTeacherPct: number;
   retireTotal: number;
   contractAndRoyal: number;
+  vacantDirector: number;
+  vacantDeputy: number;
+  vacantTeacher: number;
+  vacantTotal: number;
+  vacantSchools: number;
   deficitSchools: number;
   balancedSchools: number;
   surplusSchools: number;

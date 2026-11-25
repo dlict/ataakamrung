@@ -1,6 +1,10 @@
 import { useMemo, useState } from 'react';
 import { ArrowDownUp, Download, FileSpreadsheet, Search } from 'lucide-react';
 import type { SchoolStaffingRecord } from '../types/staffing';
+import {
+  buildGroupedRowsWithBranchTotals,
+  getRelatedBranchGroupCodes,
+} from '../utils/branchGrouping';
 import { exportStaffingExcel } from '../utils/excelExport';
 import {
   formatDeficitPositionsText,
@@ -8,8 +12,10 @@ import {
   formatPercent,
   formatSigned,
   formatSurplusPositionsText,
+  formatVacantPositionsText,
   getDiffLabel,
   getDiffToneClass,
+  getVacantCounts,
 } from '../utils/formatters';
 
 interface SchoolsTableViewProps {
@@ -28,6 +34,8 @@ interface SchoolsTableViewProps {
 
 type StatusFilter =
   | 'all'
+  | 'has_branch'
+  | 'vacant'
   | 'deficit'
   | 'deficit_teacher'
   | 'deficit_deputy'
@@ -66,6 +74,11 @@ export function SchoolsTableView({
   const [sortAsc, setSortAsc] = useState(true);
   const [exportingExcel, setExportingExcel] = useState(false);
 
+  const relatedBranchCodes = useMemo(
+    () => getRelatedBranchGroupCodes(records),
+    [records]
+  );
+
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     return records
@@ -74,6 +87,8 @@ export function SchoolsTableView({
           const hay = `${r.school_code} ${r.school_name} ${r.subdistrict} ${r.district} ${r.project_name}`.toLowerCase();
           if (!hay.includes(q)) return false;
         }
+        if (statusFilter === 'has_branch') return relatedBranchCodes.has(r.school_code);
+        if (statusFilter === 'vacant') return getVacantCounts(r).total > 0;
         if (statusFilter === 'deficit') return r.diff_total < 0;
         if (statusFilter === 'deficit_teacher') return r.diff_teacher < 0;
         if (statusFilter === 'deficit_deputy') return r.diff_deputy < 0;
@@ -90,7 +105,12 @@ export function SchoolsTableView({
         const bv = b[sortField];
         return sortAsc ? av - bv : bv - av;
       });
-  }, [records, search, statusFilter, sortField, sortAsc]);
+  }, [records, relatedBranchCodes, search, statusFilter, sortField, sortAsc]);
+
+  const groupedRows = useMemo(
+    () => buildGroupedRowsWithBranchTotals(filtered, sortField === 'seq_no' && sortAsc),
+    [filtered, sortField, sortAsc]
+  );
 
   function handleSort(field: SortField) {
     if (sortField === field) {
@@ -285,6 +305,8 @@ export function SchoolsTableView({
               className="h-10 rounded-md border border-[#D1D5DB] bg-white px-3 text-sm text-[#111827] focus:border-[#1E3A8A] focus:outline-none"
             >
               <option value="all">ทุกสถานะอัตรากำลัง</option>
+              <option value="has_branch">โรงเรียนที่มีสาขา (แม่+สาขา)</option>
+              <option value="vacant">มีตำแหน่งว่าง (จ.18)</option>
               <option value="deficit">ขาดเกณฑ์ (รวมทุกตำแหน่ง)</option>
               <option value="deficit_teacher">ขาดเกณฑ์ตำแหน่ง ครูผู้สอน</option>
               <option value="deficit_deputy">ขาดเกณฑ์ตำแหน่ง รอง ผอ.</option>
@@ -400,6 +422,9 @@ export function SchoolsTableView({
                       <th className="px-3 py-3 font-medium whitespace-nowrap">
                         ตำแหน่งที่ขาด/เกิน
                       </th>
+                      <th className="px-3 py-3 font-medium whitespace-nowrap">
+                        ว่าง (จ.18)
+                      </th>
                       <th className="py-3 pl-3 pr-6 text-right font-medium whitespace-nowrap">
                         <button
                           type="button"
@@ -456,14 +481,143 @@ export function SchoolsTableView({
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#F3F4F6]">
-                {filtered.map((r) => {
+                {groupedRows.map((item) => {
+                  if (item.kind === 'branch_total') {
+                    const c = item.combined;
+                    const deficitText = formatDeficitPositionsText(c);
+                    const surplusText = formatSurplusPositionsText(c);
+                    const vacantText = formatVacantPositionsText(c);
+                    return (
+                      <tr
+                        key={`branch-total-${item.mainSchool.school_code}`}
+                        className="border-y border-[#FDE68A] bg-[#FFFBEB] font-medium"
+                      >
+                        <td className="py-3 pl-6 pr-2 text-xs text-[#92400E]" />
+                        <td className="px-2 py-3 font-mono-num text-xs font-semibold text-[#92400E]">
+                          รวม
+                        </td>
+                        <td className="px-3 py-3 text-xs font-semibold text-[#92400E]">
+                          แม่+สาขา
+                        </td>
+                        <td className="px-3 py-3">
+                          <div className="font-semibold text-[#92400E]">{c.school_name}</div>
+                          <div className="text-[12px] text-[#B45309]">
+                            รวมข้อมูลโรงเรียนหลักและ {item.branches.length} สาขา · อ.{c.district}
+                          </div>
+                        </td>
+                        <td className="px-3 py-3 text-[#92400E] whitespace-nowrap">
+                          รวม {1 + item.branches.length} แห่ง
+                        </td>
+                        <td className="px-3 py-3 text-right font-mono-num font-semibold text-[#111827] whitespace-nowrap">
+                          {formatNumber(c.students_count)}{' '}
+                          <span className="font-normal text-[#6B7280]">({c.classrooms_count})</span>
+                        </td>
+
+                        {columnGroup === 'summary' && (
+                          <>
+                            <td className="px-3 py-3 text-right font-mono-num font-semibold text-[#111827]">
+                              {formatNumber(c.actual_total)}
+                            </td>
+                            <td className="px-3 py-3 text-right font-mono-num text-[#4B5563]">
+                              {formatNumber(c.j18_calc_total)}
+                            </td>
+                            <td className="px-3 py-3 text-right font-mono-num text-[#4B5563]">
+                              {formatNumber(c.criteria_total)}
+                            </td>
+                            <td
+                              className={`px-3 py-3 text-right font-mono-num font-semibold ${getDiffToneClass(
+                                c.diff_total
+                              )}`}
+                            >
+                              {formatSigned(c.diff_total)}
+                            </td>
+                            <td className="px-3 py-3 text-[13px]">
+                              {!deficitText && !surplusText ? (
+                                <span className="text-[#6B7280]">พอดีทุกตำแหน่ง</span>
+                              ) : (
+                                <div className="space-y-0.5">
+                                  {deficitText && (
+                                    <div className="font-medium text-[#B91C1C]">{deficitText}</div>
+                                  )}
+                                  {surplusText && (
+                                    <div className="font-medium text-[#0F766E]">{surplusText}</div>
+                                  )}
+                                </div>
+                              )}
+                            </td>
+                            <td className="px-3 py-3 text-[13px] whitespace-nowrap">
+                              {vacantText ? (
+                                <span className="font-semibold text-[#15803D]">{vacantText}</span>
+                              ) : (
+                                <span className="text-[#9CA3AF]">—</span>
+                              )}
+                            </td>
+                            <td
+                              className={`py-3 pl-3 pr-6 text-right font-mono-num font-semibold ${getDiffToneClass(
+                                c.diff_teacher
+                              )}`}
+                            >
+                              {formatPercent(c.diff_teacher_pct)}
+                            </td>
+                          </>
+                        )}
+
+                        {columnGroup === 'positions' && (
+                          <>
+                            <td className="px-3 py-3 text-right font-mono-num font-semibold text-[#111827]">
+                              {c.actual_director} / {c.actual_deputy} / {c.actual_teacher}
+                            </td>
+                            <td className="px-3 py-3 text-right font-mono-num text-[#4B5563]">
+                              {c.criteria_director} / {c.criteria_deputy} / {c.criteria_teacher}
+                            </td>
+                            <td
+                              className={`py-3 pl-3 pr-6 text-right font-mono-num font-semibold ${getDiffToneClass(
+                                c.diff_total
+                              )}`}
+                            >
+                              {formatSigned(c.diff_director)} / {formatSigned(c.diff_deputy)} /{' '}
+                              {formatSigned(c.diff_teacher)}
+                            </td>
+                          </>
+                        )}
+
+                        {columnGroup === 'retirement' && (
+                          <>
+                            <td className="px-3 py-3 text-right font-mono-num font-semibold text-[#111827]">
+                              {formatNumber(c.retire_total)}
+                            </td>
+                            <td
+                              className={`px-3 py-3 text-right font-mono-num font-semibold ${getDiffToneClass(
+                                c.post_retire_total
+                              )}`}
+                            >
+                              {formatSigned(c.post_retire_total)}
+                            </td>
+                            <td className="px-3 py-3 text-right font-mono-num text-[#4B5563]">
+                              {c.secondment_out} / {c.secondment_in}
+                            </td>
+                            <td className="px-3 py-3 text-right font-mono-num text-[#4B5563]">
+                              {formatNumber(c.royal_decree_teacher)}
+                            </td>
+                            <td className="py-3 pl-3 pr-6 text-right font-mono-num font-semibold text-[#111827]">
+                              {formatNumber(c.contract_teacher)}
+                            </td>
+                          </>
+                        )}
+                      </tr>
+                    );
+                  }
+
+                  const r = item.record;
                   const isChecked = compareCodes.includes(r.school_code);
                   const disableNew = !isChecked && compareCodes.length >= 6;
                   return (
                   <tr
                     key={r.school_code}
                     onClick={() => onSelectSchool(r)}
-                    className="cursor-pointer transition-colors hover:bg-[#F9FAFB]"
+                    className={`cursor-pointer transition-colors hover:bg-[#F9FAFB] ${
+                      item.role === 'branch' ? 'bg-[#FAFAFA]' : ''
+                    }`}
                   >
                     <td
                       className="py-3 pl-6 pr-2"
@@ -485,7 +639,19 @@ export function SchoolsTableView({
                       {r.school_code}
                     </td>
                     <td className="px-3 py-3">
-                      <div className="font-medium text-[#111827]">{r.school_name}</div>
+                      <div className="font-medium text-[#111827]">
+                        {item.role === 'branch' && (
+                          <span className="mr-1.5 text-[#9CA3AF]" aria-hidden="true">
+                            ↳
+                          </span>
+                        )}
+                        {r.school_name}
+                        {item.role === 'main' && item.branchCount ? (
+                          <span className="ml-2 text-xs font-medium text-[#B45309]">
+                            (มี {item.branchCount} สาขา)
+                          </span>
+                        ) : null}
+                      </div>
                       <div className="text-[13px] text-[#6B7280]">
                         ต.{r.subdistrict} · อ.{r.district}
                         {r.special_feature ? ` · ${r.special_feature}` : ''}
@@ -533,6 +699,16 @@ export function SchoolsTableView({
                                   <div className="font-medium text-[#0F766E]">{surplusText}</div>
                                 )}
                               </div>
+                            );
+                          })()}
+                        </td>
+                        <td className="px-3 py-3 text-[13px] whitespace-nowrap">
+                          {(() => {
+                            const vacantText = formatVacantPositionsText(r);
+                            return vacantText ? (
+                              <span className="font-medium text-[#15803D]">{vacantText}</span>
+                            ) : (
+                              <span className="text-[#9CA3AF]">—</span>
                             );
                           })()}
                         </td>
@@ -597,9 +773,64 @@ export function SchoolsTableView({
 
           {/* Mobile Responsive Card-Row List */}
           <div className="divide-y divide-[#F3F4F6] md:hidden">
-            {filtered.map((r) => {
+            {groupedRows.map((item) => {
+              if (item.kind === 'branch_total') {
+                const c = item.combined;
+                const deficitText = formatDeficitPositionsText(c);
+                const surplusText = formatSurplusPositionsText(c);
+                const vacantText = formatVacantPositionsText(c);
+                return (
+                  <div
+                    key={`mobile-branch-total-${item.mainSchool.school_code}`}
+                    className="border-l-4 border-l-[#D97706] bg-[#FFFBEB] px-4 py-3.5"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="truncate text-[14px] font-semibold text-[#92400E]">
+                          {c.school_name}
+                        </p>
+                        <p className="mt-0.5 text-[12px] text-[#B45309]">
+                          รวมแม่ + {item.branches.length} สาขา · อ.{c.district}
+                        </p>
+                      </div>
+                      <div className="shrink-0 text-right">
+                        <p
+                          className={`font-mono-num text-[15px] font-semibold ${getDiffToneClass(
+                            c.diff_total
+                          )}`}
+                        >
+                          {formatSigned(c.diff_total)}
+                        </p>
+                        <p className={`text-[12px] ${getDiffToneClass(c.diff_total)}`}>
+                          {getDiffLabel(c.diff_total)}
+                        </p>
+                      </div>
+                    </div>
+                    {(deficitText || surplusText || vacantText) && (
+                      <div className="mt-1.5 flex flex-wrap gap-x-2 text-[13px] font-medium">
+                        {deficitText && <span className="text-[#B91C1C]">{deficitText}</span>}
+                        {surplusText && <span className="text-[#0F766E]">{surplusText}</span>}
+                        {vacantText && <span className="text-[#15803D]">{vacantText}</span>}
+                      </div>
+                    )}
+                    <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-[13px] text-[#4B5563] tabular-nums">
+                      <span>นร. {formatNumber(c.students_count)}</span>
+                      <span>คนครอง {formatNumber(c.actual_total)}</span>
+                      <span>เกณฑ์ {formatNumber(c.criteria_total)}</span>
+                      {(c.contract_teacher > 0 || c.royal_decree_teacher > 0) && (
+                        <span>
+                          จ้าง/พรก. {formatNumber(c.contract_teacher + c.royal_decree_teacher)}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                );
+              }
+
+              const r = item.record;
               const deficitText = formatDeficitPositionsText(r);
               const surplusText = formatSurplusPositionsText(r);
+              const vacantText = formatVacantPositionsText(r);
               return (
                 <button
                   key={r.school_code}
@@ -610,7 +841,7 @@ export function SchoolsTableView({
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <p className="truncate text-[15px] font-semibold text-[#111827]">
-                        {r.school_name}
+                        {item.role === 'branch' ? `↳ ${r.school_name}` : r.school_name}
                       </p>
                       <p className="mt-0.5 text-[13px] text-[#6B7280]">
                         {r.school_code} · ต.{r.subdistrict} อ.{r.district} · {r.school_size}
@@ -629,10 +860,11 @@ export function SchoolsTableView({
                       </p>
                     </div>
                   </div>
-                  {(deficitText || surplusText) && (
+                  {(deficitText || surplusText || vacantText) && (
                     <div className="mt-2 flex flex-wrap gap-x-2 text-[13px] font-medium">
                       {deficitText && <span className="text-[#B91C1C]">{deficitText}</span>}
                       {surplusText && <span className="text-[#0F766E]">{surplusText}</span>}
+                      {vacantText && <span className="text-[#15803D]">{vacantText}</span>}
                     </div>
                   )}
                   <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-[13px] text-[#4B5563] tabular-nums">

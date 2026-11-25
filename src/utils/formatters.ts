@@ -66,3 +66,44 @@ export function formatSurplusPositionsText(record: {
   return parts.join(' · ');
 }
 
+export interface VacantCounts {
+  director: number;
+  deputy: number;
+  teacher: number;
+  total: number;
+}
+
+export function getVacantCounts(record: {
+  j18_paid_director: number;
+  j18_paid_deputy: number;
+  j18_paid_teacher: number;
+  actual_director: number;
+  actual_deputy: number;
+  actual_teacher: number;
+}): VacantCounts {
+  const director = Math.max(0, record.j18_paid_director - record.actual_director);
+  const deputy = Math.max(0, record.j18_paid_deputy - record.actual_deputy);
+  const teacher = Math.max(0, record.j18_paid_teacher - record.actual_teacher);
+  return {
+    director,
+    deputy,
+    teacher,
+    total: director + deputy + teacher,
+  };
+}
+
+export function formatVacantPositionsText(record: {
+  j18_paid_director: number;
+  j18_paid_deputy: number;
+  j18_paid_teacher: number;
+  actual_director: number;
+  actual_deputy: number;
+  actual_teacher: number;
+}): string {
+  const v = getVacantCounts(record);
+  const parts: string[] = [];
+  if (v.director > 0) parts.push(`ผอ. ${formatNumber(v.director)}`);
+  if (v.deputy > 0) parts.push(`รอง ${formatNumber(v.deputy)}`);
+  if (v.teacher > 0) parts.push(`ครู ${formatNumber(v.teacher)}`);
+  return parts.length > 0 ? `ว่าง ${parts.join(' · ')}` : '';
+}

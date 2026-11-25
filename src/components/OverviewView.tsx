@@ -11,8 +11,10 @@ import {
   formatPercent,
   formatSigned,
   formatSurplusPositionsText,
+  formatVacantPositionsText,
   getDiffLabel,
   getDiffToneClass,
+  getVacantCounts,
 } from '../utils/formatters';
 import { DistrictComparisonChart } from './DistrictComparisonChart';
 import { DistrictPositionChart } from './DistrictPositionChart';
@@ -28,7 +30,7 @@ interface OverviewViewProps {
   onNavigateToSchools: () => void;
 }
 
-type PriorityMode = 'deficit' | 'surplus' | 'vacant_director' | 'retiring';
+type PriorityMode = 'deficit' | 'surplus' | 'vacant' | 'vacant_director' | 'retiring';
 
 export function OverviewView({
   records,
@@ -166,7 +168,10 @@ export function OverviewView({
             </span>
           </div>
           <p className="mt-2 text-sm text-[#4B5563] tabular-nums">
-            ตาม จ.18 จำนวน {formatNumber(summary.j18CalcTotal)} · ตำแหน่งว่าง {formatNumber(Math.max(0, vacantFromJ18))}
+            จ.18 ถือจ่าย {formatNumber(summary.j18PaidTotal)} ·{' '}
+            <span className={summary.vacantTotal > 0 ? 'font-medium text-[#15803D]' : ''}>
+              ตำแหน่งว่าง {formatNumber(summary.vacantTotal)} อัตรา
+            </span>
           </p>
         </div>
 
@@ -211,6 +216,92 @@ export function OverviewView({
             อัตราจ้าง {formatNumber(summary.contractTeacher)} · พรก. {formatNumber(summary.royalDecreeTeacher)} · เกษียณ{' '}
             {formatNumber(summary.retireTotal)}
           </p>
+        </div>
+      </section>
+
+      {/* Vacant Positions Summary Panel (J.18 Paid minus Actual) */}
+      <section
+        aria-label="สรุปตำแหน่งว่างตามบัญชีถือจ่าย"
+        className="rounded-lg border border-[#E5E7EB] bg-white"
+      >
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#F3F4F6] px-5 py-3.5 sm:px-6">
+          <div>
+            <h2 className="text-base font-semibold text-[#111827]">
+              สรุปตำแหน่งว่าง (จ.18 บัญชีถือจ่าย − คนครองจริง)
+            </h2>
+            <p className="mt-0.5 text-xs text-[#6B7280]">
+              คำนวณจากอัตราที่มีในบัญชีถือจ่าย (จ.18) แต่ยังไม่มีผู้ดำรงตำแหน่งจริงในแต่ละโรงเรียน
+            </p>
+          </div>
+          {summary.vacantSchools > 0 && (
+            <button
+              type="button"
+              onClick={() => {
+                setPriorityMode('vacant');
+                document
+                  .getElementById('priority-schools-section')
+                  ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+              }}
+              className="inline-flex items-center gap-1.5 text-sm font-medium text-[#15803D] hover:underline whitespace-nowrap shrink-0"
+            >
+              <span>ดูรายชื่อ {formatNumber(summary.vacantSchools)} โรงเรียนที่มีตำแหน่งว่าง</span>
+              <ArrowRight className="h-4 w-4" aria-hidden="true" />
+            </button>
+          )}
+        </div>
+        <div className="grid grid-cols-1 divide-y divide-[#E5E7EB] sm:grid-cols-2 sm:divide-y-0 lg:grid-cols-4 lg:divide-x">
+          <div className="px-5 py-4 sm:border-b sm:border-r lg:border-b-0 lg:border-r-0 border-[#E5E7EB]">
+            <p className="text-sm text-[#6B7280]">ตำแหน่งว่างรวมทั้งหมด</p>
+            <div className="mt-1.5 flex items-baseline gap-2">
+              <span
+                className={`font-mono-num text-2xl font-semibold ${
+                  summary.vacantTotal > 0 ? 'text-[#15803D]' : 'text-[#111827]'
+                }`}
+              >
+                {formatNumber(summary.vacantTotal)}
+              </span>
+              <span className="text-sm text-[#6B7280]">
+                อัตรา · {formatNumber(summary.vacantSchools)} โรงเรียน
+              </span>
+            </div>
+          </div>
+          <div className="px-5 py-4 sm:border-b lg:border-b-0 border-[#E5E7EB]">
+            <p className="text-sm text-[#6B7280]">ว่างตำแหน่ง ผอ.</p>
+            <div className="mt-1.5 flex items-baseline gap-2">
+              <span className="font-mono-num text-2xl font-semibold text-[#111827]">
+                {formatNumber(summary.vacantDirector)}
+              </span>
+              <span className="text-sm text-[#6B7280]">
+                อัตรา · {formatNumber(summary.vacantDirectorByJ18Schools)} แห่ง
+              </span>
+            </div>
+          </div>
+          <div className="px-5 py-4 sm:border-r lg:border-r-0 border-[#E5E7EB]">
+            <p className="text-sm text-[#6B7280]">ว่างตำแหน่ง รอง ผอ.</p>
+            <div className="mt-1.5 flex items-baseline gap-2">
+              <span className="font-mono-num text-2xl font-semibold text-[#111827]">
+                {formatNumber(summary.vacantDeputy)}
+              </span>
+              <span className="text-sm text-[#6B7280]">
+                อัตรา · {formatNumber(summary.vacantDeputyByJ18Schools)} แห่ง
+              </span>
+            </div>
+          </div>
+          <div className="px-5 py-4">
+            <p className="text-sm text-[#6B7280]">ว่างตำแหน่ง ครูผู้สอน</p>
+            <div className="mt-1.5 flex items-baseline gap-2">
+              <span
+                className={`font-mono-num text-2xl font-semibold ${
+                  summary.vacantTeacher > 0 ? 'text-[#15803D]' : 'text-[#111827]'
+                }`}
+              >
+                {formatNumber(summary.vacantTeacher)}
+              </span>
+              <span className="text-sm text-[#6B7280]">
+                อัตรา · {formatNumber(summary.vacantTeacherByJ18Schools)} แห่ง
+              </span>
+            </div>
+          </div>
         </div>
       </section>
 
@@ -310,6 +401,11 @@ export function OverviewView({
                     <div className="flex flex-wrap items-center justify-between gap-2 text-[13px] text-[#6B7280] tabular-nums">
                       <span>
                         ขาด {d.deficitSchools} · พอดี {d.balancedSchools} · เกิน {d.surplusSchools} โรงเรียน
+                        {d.vacantTotal > 0 && (
+                          <span className="ml-2 font-medium text-[#15803D]">
+                            · ว่าง {formatNumber(d.vacantTotal)} อัตรา
+                          </span>
+                        )}
                       </span>
                       <span>
                         ผอ. {formatSigned(d.diffDirector)} · รอง {formatSigned(d.diffDeputy)} · ครู {formatSigned(d.diffTeacher)}
@@ -482,7 +578,10 @@ export function OverviewView({
       </div>
 
       {/* Priority Schools List */}
-      <section className="rounded-lg border border-[#E5E7EB] bg-white">
+      <section
+        id="priority-schools-section"
+        className="rounded-lg border border-[#E5E7EB] bg-white"
+      >
         <div className="flex flex-col gap-3 border-b border-[#E5E7EB] p-5 sm:flex-row sm:items-center sm:justify-between sm:px-6">
           <div>
             <h2 className="text-lg font-semibold text-[#111827]">
@@ -497,6 +596,7 @@ export function OverviewView({
             {(
               [
                 { id: 'deficit', label: 'ขาดแคลนมากที่สุด' },
+                { id: 'vacant', label: `มีตำแหน่งว่าง (${formatNumber(summary.vacantSchools)})` },
                 { id: 'surplus', label: 'เกินเกณฑ์มากที่สุด' },
                 { id: 'vacant_director', label: 'ว่างตำแหน่ง ผอ.' },
                 { id: 'retiring', label: 'มีผู้เกษียณ 1 ต.ค.' },
@@ -538,6 +638,7 @@ export function OverviewView({
                   <th className="hidden lg:table-cell px-3 py-3 font-medium">
                     จำแนกตำแหน่ง (ผอ./รอง/ครู)
                   </th>
+                  <th className="px-3 py-3 font-medium whitespace-nowrap">ตำแหน่งว่าง (จ.18)</th>
                   <th className="hidden sm:table-cell py-3 pl-3 pr-6 text-right font-medium">
                     อัตราจ้าง+พรก.
                   </th>
@@ -547,6 +648,7 @@ export function OverviewView({
                 {prioritySchools.map((s) => {
                   const deficitText = formatDeficitPositionsText(s);
                   const surplusText = formatSurplusPositionsText(s);
+                  const vacantText = formatVacantPositionsText(s);
                   return (
                     <tr
                       key={s.school_code}
@@ -612,6 +714,13 @@ export function OverviewView({
                         )}
                         {!deficitText && !surplusText && (
                           <span className="text-[#6B7280]">พอดีทุกตำแหน่ง</span>
+                        )}
+                      </td>
+                      <td className="px-3 py-3.5 text-[13px] whitespace-nowrap">
+                        {vacantText ? (
+                          <span className="font-medium text-[#15803D]">{vacantText}</span>
+                        ) : (
+                          <span className="text-[#9CA3AF]">—</span>
                         )}
                       </td>
                       <td className="hidden sm:table-cell py-3.5 pl-3 pr-6 text-right font-mono-num text-[#4B5563]">

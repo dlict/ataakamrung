@@ -207,6 +207,9 @@ export function computeSummaryFromRecords(
     actualTeacher: 0,
     actualTotal: 0,
 
+    j18PaidDirector: 0,
+    j18PaidDeputy: 0,
+    j18PaidTeacher: 0,
     j18PaidTotal: 0,
     j18CalcDirector: 0,
     j18CalcDeputy: 0,
@@ -240,6 +243,15 @@ export function computeSummaryFromRecords(
     royalDecreeTeacher: 0,
     contractTeacher: 0,
 
+    vacantDirector: 0,
+    vacantDeputy: 0,
+    vacantTeacher: 0,
+    vacantTotal: 0,
+    vacantSchools: 0,
+    vacantDirectorByJ18Schools: 0,
+    vacantDeputyByJ18Schools: 0,
+    vacantTeacherByJ18Schools: 0,
+
     deficitSchools: 0,
     balancedSchools: 0,
     surplusSchools: 0,
@@ -256,6 +268,9 @@ export function computeSummaryFromRecords(
     acc.actualTeacher += r.actual_teacher;
     acc.actualTotal += r.actual_total;
 
+    acc.j18PaidDirector += r.j18_paid_director;
+    acc.j18PaidDeputy += r.j18_paid_deputy;
+    acc.j18PaidTeacher += r.j18_paid_teacher;
     acc.j18PaidTotal += r.j18_paid_total;
     acc.j18CalcDirector += r.j18_calc_director;
     acc.j18CalcDeputy += r.j18_calc_deputy;
@@ -286,6 +301,20 @@ export function computeSummaryFromRecords(
     acc.secondmentIn += r.secondment_in;
     acc.royalDecreeTeacher += r.royal_decree_teacher;
     acc.contractTeacher += r.contract_teacher;
+
+    const vacDir = Math.max(0, r.j18_paid_director - r.actual_director);
+    const vacDep = Math.max(0, r.j18_paid_deputy - r.actual_deputy);
+    const vacTea = Math.max(0, r.j18_paid_teacher - r.actual_teacher);
+    const vacSum = vacDir + vacDep + vacTea;
+
+    acc.vacantDirector += vacDir;
+    acc.vacantDeputy += vacDep;
+    acc.vacantTeacher += vacTea;
+    acc.vacantTotal += vacSum;
+    if (vacSum > 0) acc.vacantSchools++;
+    if (vacDir > 0) acc.vacantDirectorByJ18Schools++;
+    if (vacDep > 0) acc.vacantDeputyByJ18Schools++;
+    if (vacTea > 0) acc.vacantTeacherByJ18Schools++;
 
     if (r.diff_total < 0) acc.deficitSchools++;
     else if (r.diff_total > 0) acc.surplusSchools++;
@@ -347,6 +376,11 @@ export function computeDistrictBreakdown(
       diffTeacherPct: sum.diffTeacherPct,
       retireTotal: sum.retireTotal,
       contractAndRoyal: sum.contractTeacher + sum.royalDecreeTeacher,
+      vacantDirector: sum.vacantDirector,
+      vacantDeputy: sum.vacantDeputy,
+      vacantTeacher: sum.vacantTeacher,
+      vacantTotal: sum.vacantTotal,
+      vacantSchools: sum.vacantSchools,
       deficitSchools: sum.deficitSchools,
       balancedSchools: sum.balancedSchools,
       surplusSchools: sum.surplusSchools,

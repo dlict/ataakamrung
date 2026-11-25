@@ -1,24 +1,46 @@
 import { X } from 'lucide-react';
 import type { SchoolStaffingRecord } from '../types/staffing';
 import {
+  buildGroupedRowsWithBranchTotals,
+  getRelatedBranchGroupCodes,
+} from '../utils/branchGrouping';
+import {
   formatDeficitPositionsText,
   formatNumber,
   formatPercent,
   formatSigned,
   formatSurplusPositionsText,
+  formatVacantPositionsText,
   getDiffLabel,
   getDiffToneClass,
+  getVacantCounts,
 } from '../utils/formatters';
 
 interface SchoolDetailDrawerProps {
   school: SchoolStaffingRecord | null;
+  allRecords?: SchoolStaffingRecord[];
   onClose: () => void;
 }
 
-export function SchoolDetailDrawer({ school, onClose }: SchoolDetailDrawerProps) {
+export function SchoolDetailDrawer({
+  school,
+  allRecords = [],
+  onClose,
+}: SchoolDetailDrawerProps) {
   if (!school) return null;
 
-  const vacantFromJ18 = school.j18_calc_total - school.actual_total;
+  const relatedCodes = getRelatedBranchGroupCodes(allRecords);
+  const branchGroup = relatedCodes.has(school.school_code)
+    ? buildGroupedRowsWithBranchTotals(allRecords, true).find(
+        (row): row is Extract<typeof row, { kind: 'branch_total' }> =>
+          row.kind === 'branch_total' &&
+          (row.mainSchool.school_code === school.school_code ||
+            row.branches.some((b) => b.school_code === school.school_code))
+      )
+    : undefined;
+
+  const vacantCounts = getVacantCounts(school);
+  const vacantText = formatVacantPositionsText(school);
   const studentTeacherRatio =
     school.actual_teacher > 0
       ? (school.students_count / school.actual_teacher).toFixed(1)
@@ -161,6 +183,23 @@ export function SchoolDetailDrawer({ school, onClose }: SchoolDetailDrawerProps)
                     <td className="px-3 py-2.5">{school.j18_paid_teacher}</td>
                     <td className="px-3 py-2.5 font-medium">{school.j18_paid_total}</td>
                   </tr>
+                  <tr className="bg-[#F0FDF4]/70">
+                    <td className="px-3 py-2.5 text-left font-sans font-medium text-[#15803D]">
+                      ตำแหน่งว่าง (จ.18 ถือจ่าย − คนครอง)
+                    </td>
+                    <td className="px-3 py-2.5 font-medium text-[#15803D]">
+                      {vacantCounts.director || '—'}
+                    </td>
+                    <td className="px-3 py-2.5 font-medium text-[#15803D]">
+                      {vacantCounts.deputy || '—'}
+                    </td>
+                    <td className="px-3 py-2.5 font-medium text-[#15803D]">
+                      {vacantCounts.teacher || '—'}
+                    </td>
+                    <td className="px-3 py-2.5 font-semibold text-[#15803D]">
+                      {vacantCounts.total || '—'}
+                    </td>
+                  </tr>
                   <tr>
                     <td className="px-3 py-2.5 text-left font-sans text-[#4B5563]">
                       ตาม จ.18 (คำนวณอัตรา)
@@ -233,12 +272,64 @@ export function SchoolDetailDrawer({ school, onClose }: SchoolDetailDrawerProps)
                 </tbody>
               </table>
             </div>
-            {vacantFromJ18 > 0 && (
-              <p className="mt-2 text-xs text-[#6B7280]">
-                หมายเหตุ: มีตำแหน่งว่างใน จ.18 ที่ยังไม่มีคนครองจริง {formatNumber(vacantFromJ18)} อัตรา
+            {vacantCounts.total > 0 && (
+              <p className="mt-2 text-xs font-medium text-[#15803D]">
+                หมายเหตุ: มีตำแหน่งว่างตามบัญชีถือจ่าย จ.18 จำนวน {formatNumber(vacantCounts.total)} อัตรา ({vacantText})
               </p>
             )}
           </div>
+
+          {branchGroup && (
+            <div className="rounded-md border border-[#FDE68A] bg-[#FFFBEB] p-4">
+              <div className="flex flex-wrap items-baseline justify-between gap-2">
+                <h3 className="text-sm font-semibold text-[#92400E]">
+                  สรุปผลรวมโรงเรียนหลัก + สาขา ({1 + branchGroup.branches.length} แห่ง)
+                </h3>
+                <span
+                  className={`font-mono-num text-sm font-semibold ${getDiffToneClass(
+                    branchGroup.combined.diff_total
+                  )}`}
+                >
+                  ขาด/เกินรวม {formatSigned(branchGroup.combined.diff_total)} (
+                  {formatPercent(branchGroup.combined.diff_teacher_pct)})
+                </span>
+              </div>
+              <p className="mt-1 text-xs text-[#B45309]">
+                {branchGroup.mainSchool.school_name} +{' '}
+                {branchGroup.branches.map((b) => b.school_name).join(', ')}
+              </p>
+              <div className="mt-3 grid grid-cols-2 gap-2.5 text-xs sm:grid-cols-4">
+                <div>
+                  <span className="text-[#92400E]">นักเรียนรวม</span>
+                  <p className="mt-0.5 font-mono-num text-sm font-semibold text-[#111827]">
+                    {formatNumber(branchGroup.combined.students_count)} คน
+                  </p>
+                </div>
+                <div>
+                  <span className="text-[#92400E]">คนครองรวม</span>
+                  <p className="mt-0.5 font-mono-num text-sm font-semibold text-[#111827]">
+                    {formatNumber(branchGroup.combined.actual_total)} คน
+                  </p>
+                </div>
+                <div>
+                  <span className="text-[#92400E]">เกณฑ์ ก.ค.ศ.</span>
+                  <p className="mt-0.5 font-mono-num text-sm font-semibold text-[#111827]">
+                    {formatNumber(branchGroup.combined.criteria_total)} อัตรา
+                  </p>
+                </div>
+                <div>
+                  <span className="text-[#92400E]">สภาพจริงครู</span>
+                  <p className="mt-0.5 font-mono-num text-sm font-semibold text-[#111827]">
+                    {formatSigned(
+                      branchGroup.combined.diff_teacher +
+                        branchGroup.combined.royal_decree_teacher +
+                        branchGroup.combined.contract_teacher
+                    )}
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Support Staff & Secondment */}
           <div className="border-t border-[#F3F4F6] pt-5">

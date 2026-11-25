@@ -408,6 +408,7 @@ export default function App() {
 
       <SchoolDetailDrawer
         school={selectedSchool}
+        allRecords={records}
         onClose={() => setSelectedSchool(null)}
       />
 

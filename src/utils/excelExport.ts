@@ -1,5 +1,6 @@
 import ExcelJS from 'exceljs';
 import type { SchoolStaffingRecord } from '../types/staffing';
+import { buildGroupedRowsWithBranchTotals } from './branchGrouping';
 
 export interface ExportExcelOptions {
   periodLabel: string;
@@ -40,6 +41,11 @@ const FILLS = {
     pattern: 'solid' as const,
     fgColor: { argb: 'FFDAEEF3' },
   },
+  branchSubtotal: {
+    type: 'pattern' as const,
+    pattern: 'solid' as const,
+    fgColor: { argb: 'FFFFF2CC' },
+  },
   totalRow: {
     type: 'pattern' as const,
     pattern: 'solid' as const,
@@ -52,6 +58,9 @@ const COL_LETTERS = [
   'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y',
 ] as const;
 
+// Leaf columns summed vertically with SUBTOTAL(9, ...); derived columns I, N, R, S..V, Y use row-level formulas
+const SUBTOTAL_LEAF_COLS = new Set([4, 5, 6, 7, 8, 10, 11, 12, 13, 15, 16, 17, 23, 24]);
+
 function buildSubtitleText(periodLabel: string, periodNote?: string): string {
   const note = (periodNote ?? '').trim();
   if (note) {
@@ -63,6 +72,33 @@ function buildSubtitleText(periodLabel: string, periodNote?: string): string {
   return 'ข้อมูลล่าสุด';
 }
 
+function buildRowDerivedCellValue(
+  col: number,
+  rowNum: number,
+  cachedResult: number
+): ExcelJS.CellValue | undefined {
+  switch (col) {
+    case 9:
+      return { formula: `SUM(F${rowNum}:H${rowNum})`, result: cachedResult };
+    case 14:
+      return { formula: `SUM(K${rowNum}:M${rowNum})`, result: cachedResult };
+    case 18:
+      return { formula: `SUM(O${rowNum}:Q${rowNum})`, result: cachedResult };
+    case 19:
+      return { formula: `K${rowNum}-O${rowNum}`, result: cachedResult };
+    case 20:
+      return { formula: `L${rowNum}-P${rowNum}`, result: cachedResult };
+    case 21:
+      return { formula: `M${rowNum}-Q${rowNum}`, result: cachedResult };
+    case 22:
+      return { formula: `SUM(S${rowNum}:U${rowNum})`, result: cachedResult };
+    case 25:
+      return { formula: `U${rowNum}+W${rowNum}+X${rowNum}`, result: cachedResult };
+    default:
+      return undefined;
+  }
+}
+
 export async function exportStaffingExcel(
   records: readonly SchoolStaffingRecord[],
   options: ExportExcelOptions
@@ -70,6 +106,7 @@ export async function exportStaffingExcel(
   const workbook = new ExcelJS.Workbook();
   workbook.creator = 'สพป.แม่ฮ่องสอน เขต 1';
   workbook.created = new Date();
+  workbook.calcProperties.fullCalcOnLoad = true;
 
   const sheet = workbook.addWorksheet('ปริมาณงานสถานศึกษา', {
     views: [{ state: 'frozen', xSplit: 2, ySplit: 4 }],
@@ -90,15 +127,17 @@ export async function exportStaffingExcel(
     },
   });
 
+  const groupedRows = buildGroupedRowsWithBranchTotals(records, true);
+
   // Column widths matching reference spreadsheet
-  const maxSchoolNameLen = records.reduce(
-    (max, r) => Math.max(max, r.school_name.length),
-    18
-  );
+  const maxSchoolNameLen = groupedRows.reduce((max, item) => {
+    const name = item.kind === 'school' ? item.record.school_name : item.combined.school_name;
+    return Math.max(max, name.length);
+  }, 18);
   const colWidths = [
     7, // A: ลำดับที่
-    Math.min(Math.max(maxSchoolNameLen + 4, 24), 36), // B: ชื่อโรงเรียน
-    13, // C: อำเภอ
+    Math.min(Math.max(maxSchoolNameLen + 4, 24), 40), // B: ชื่อโรงเรียน
+    14, // C: อำเภอ
     7, // D: นร.
     6, // E: ห้อง
     5.5, // F: ผอ. (คนครอง)
@@ -208,6 +247,10 @@ export async function exportStaffingExcel(
 
   // Data rows start at Row 5
   const startRow = 5;
+  let currentRowNum = startRow;
+  let schoolSeq = 0;
+  let currentGroupStartRow = startRow;
+
   const totals = {
     students: 0,
     classrooms: 0,
@@ -233,100 +276,203 @@ export async function exportStaffingExcel(
     reality: 0,
   };
 
-  records.forEach((rec, index) => {
-    const rowNum = startRow + index;
+  for (const item of groupedRows) {
+    const rowNum = currentRowNum++;
     const row = sheet.getRow(rowNum);
-    row.height = 20;
 
-    const vacantTeacher = rec.j18_paid_teacher - rec.actual_teacher;
-    const vacantDisplay = vacantTeacher > 0 ? vacantTeacher : null;
-    const realityValue =
-      rec.diff_teacher + rec.royal_decree_teacher + rec.contract_teacher;
-
-    totals.students += rec.students_count;
-    totals.classrooms += rec.classrooms_count;
-    totals.actualDirector += rec.actual_director;
-    totals.actualDeputy += rec.actual_deputy;
-    totals.actualTeacher += rec.actual_teacher;
-    totals.actualTotal += rec.actual_total;
-    if (vacantTeacher > 0) totals.vacantTeacher += vacantTeacher;
-    totals.j18Director += rec.j18_paid_director;
-    totals.j18Deputy += rec.j18_paid_deputy;
-    totals.j18Teacher += rec.j18_paid_teacher;
-    totals.j18Total += rec.j18_paid_total;
-    totals.criteriaDirector += rec.criteria_director;
-    totals.criteriaDeputy += rec.criteria_deputy;
-    totals.criteriaTeacher += rec.criteria_teacher;
-    totals.criteriaTotal += rec.criteria_total;
-    totals.diffDirector += rec.diff_director;
-    totals.diffDeputy += rec.diff_deputy;
-    totals.diffTeacher += rec.diff_teacher;
-    totals.diffTotal += rec.diff_total;
-    totals.royalDecree += rec.royal_decree_teacher;
-    totals.contract += rec.contract_teacher;
-    totals.reality += realityValue;
-
-    const rowValues: Array<ExcelJS.CellValue> = [
-      index + 1,
-      rec.school_name,
-      rec.district,
-      rec.students_count,
-      rec.classrooms_count,
-      rec.actual_director,
-      rec.actual_deputy,
-      rec.actual_teacher,
-      rec.actual_total,
-      vacantDisplay,
-      rec.j18_paid_director,
-      rec.j18_paid_deputy,
-      rec.j18_paid_teacher,
-      rec.j18_paid_total,
-      rec.criteria_director,
-      rec.criteria_deputy,
-      rec.criteria_teacher,
-      rec.criteria_total,
-      rec.diff_director,
-      rec.diff_deputy,
-      rec.diff_teacher,
-      rec.diff_total,
-      rec.royal_decree_teacher,
-      rec.contract_teacher,
-      { formula: `U${rowNum}+W${rowNum}+X${rowNum}`, result: realityValue },
-    ];
-
-    rowValues.forEach((val, colIdx) => {
-      const col = colIdx + 1;
-      const cell = row.getCell(col);
-      cell.value = val;
-      cell.font = { name: 'Tahoma', size: 10, color: { argb: 'FF000000' } };
-      cell.border = THIN_BLACK_BORDER;
-      cell.alignment = {
-        horizontal: col === 2 ? 'left' : 'center',
-        vertical: 'middle',
-      };
-      if (col >= 4) {
-        cell.numFmt = '#,##0';
+    if (item.kind === 'school') {
+      const rec = item.record;
+      schoolSeq += 1;
+      if (item.role === 'main') {
+        currentGroupStartRow = rowNum;
       }
+      row.height = 20;
 
-      // Column-specific fills matching the reference layout
-      if (col === 10 && vacantTeacher > 0) {
-        cell.fill = FILLS.vacantGreen;
-      } else if (col === 13) {
-        cell.fill = FILLS.j18Teacher;
-      } else if (col === 17) {
-        cell.fill = FILLS.criteriaTeacher;
-      } else if (col === 21) {
-        cell.fill = FILLS.diffTeacher;
-      } else if (col === 25) {
-        cell.fill = FILLS.realityBlue;
+      const actualTotal = rec.actual_director + rec.actual_deputy + rec.actual_teacher;
+      const vacantTeacher = Math.max(0, rec.j18_paid_teacher - rec.actual_teacher);
+      const j18Total = rec.j18_paid_director + rec.j18_paid_deputy + rec.j18_paid_teacher;
+      const criteriaTotal = rec.criteria_director + rec.criteria_deputy + rec.criteria_teacher;
+      const diffDirector = rec.j18_paid_director - rec.criteria_director;
+      const diffDeputy = rec.j18_paid_deputy - rec.criteria_deputy;
+      const diffTeacher = rec.j18_paid_teacher - rec.criteria_teacher;
+      const diffTotal = diffDirector + diffDeputy + diffTeacher;
+      const realityValue =
+        diffTeacher + rec.royal_decree_teacher + rec.contract_teacher;
+
+      totals.students += rec.students_count;
+      totals.classrooms += rec.classrooms_count;
+      totals.actualDirector += rec.actual_director;
+      totals.actualDeputy += rec.actual_deputy;
+      totals.actualTeacher += rec.actual_teacher;
+      totals.actualTotal += actualTotal;
+      totals.vacantTeacher += vacantTeacher;
+      totals.j18Director += rec.j18_paid_director;
+      totals.j18Deputy += rec.j18_paid_deputy;
+      totals.j18Teacher += rec.j18_paid_teacher;
+      totals.j18Total += j18Total;
+      totals.criteriaDirector += rec.criteria_director;
+      totals.criteriaDeputy += rec.criteria_deputy;
+      totals.criteriaTeacher += rec.criteria_teacher;
+      totals.criteriaTotal += criteriaTotal;
+      totals.diffDirector += diffDirector;
+      totals.diffDeputy += diffDeputy;
+      totals.diffTeacher += diffTeacher;
+      totals.diffTotal += diffTotal;
+      totals.royalDecree += rec.royal_decree_teacher;
+      totals.contract += rec.contract_teacher;
+      totals.reality += realityValue;
+
+      const rowValues: Array<ExcelJS.CellValue> = [
+        schoolSeq,
+        rec.school_name,
+        rec.district,
+        rec.students_count,
+        rec.classrooms_count,
+        rec.actual_director,
+        rec.actual_deputy,
+        rec.actual_teacher,
+        { formula: `SUM(F${rowNum}:H${rowNum})`, result: actualTotal },
+        {
+          formula: `IF(M${rowNum}-H${rowNum}>0,M${rowNum}-H${rowNum},"")`,
+          result: vacantTeacher > 0 ? vacantTeacher : '',
+        },
+        rec.j18_paid_director,
+        rec.j18_paid_deputy,
+        rec.j18_paid_teacher,
+        { formula: `SUM(K${rowNum}:M${rowNum})`, result: j18Total },
+        rec.criteria_director,
+        rec.criteria_deputy,
+        rec.criteria_teacher,
+        { formula: `SUM(O${rowNum}:Q${rowNum})`, result: criteriaTotal },
+        { formula: `K${rowNum}-O${rowNum}`, result: diffDirector },
+        { formula: `L${rowNum}-P${rowNum}`, result: diffDeputy },
+        { formula: `M${rowNum}-Q${rowNum}`, result: diffTeacher },
+        { formula: `SUM(S${rowNum}:U${rowNum})`, result: diffTotal },
+        rec.royal_decree_teacher,
+        rec.contract_teacher,
+        { formula: `U${rowNum}+W${rowNum}+X${rowNum}`, result: realityValue },
+      ];
+
+      rowValues.forEach((val, colIdx) => {
+        const col = colIdx + 1;
+        const cell = row.getCell(col);
+        cell.value = val;
+        cell.font = { name: 'Tahoma', size: 10, color: { argb: 'FF000000' } };
+        cell.border = THIN_BLACK_BORDER;
+        cell.alignment = {
+          horizontal: col === 2 ? 'left' : 'center',
+          vertical: 'middle',
+        };
+        if (col >= 4) {
+          cell.numFmt = '#,##0';
+        }
+
+        if (col === 10 && vacantTeacher > 0) {
+          cell.fill = FILLS.vacantGreen;
+        } else if (col === 13) {
+          cell.fill = FILLS.j18Teacher;
+        } else if (col === 17) {
+          cell.fill = FILLS.criteriaTeacher;
+        } else if (col === 21) {
+          cell.fill = FILLS.diffTeacher;
+        } else if (col === 25) {
+          cell.fill = FILLS.realityBlue;
+        }
+      });
+    } else {
+      // Branch group subtotal row: leaf cols use SUBTOTAL(9,...), derived cols use row formulas
+      const c = item.combined;
+      const firstGroupRow = currentGroupStartRow;
+      const lastGroupRow = rowNum - 1;
+      row.height = 21;
+
+      const groupActualTotal = c.actual_director + c.actual_deputy + c.actual_teacher;
+      const groupVacantTeacher = [item.mainSchool, ...item.branches].reduce(
+        (sum, r) => sum + Math.max(0, r.j18_paid_teacher - r.actual_teacher),
+        0
+      );
+      const groupJ18Total = c.j18_paid_director + c.j18_paid_deputy + c.j18_paid_teacher;
+      const groupCriteriaTotal = c.criteria_director + c.criteria_deputy + c.criteria_teacher;
+      const groupDiffDirector = c.j18_paid_director - c.criteria_director;
+      const groupDiffDeputy = c.j18_paid_deputy - c.criteria_deputy;
+      const groupDiffTeacher = c.j18_paid_teacher - c.criteria_teacher;
+      const groupDiffTotal = groupDiffDirector + groupDiffDeputy + groupDiffTeacher;
+      const groupReality =
+        groupDiffTeacher + c.royal_decree_teacher + c.contract_teacher;
+
+      const cachedGroupValues: number[] = [
+        c.students_count,
+        c.classrooms_count,
+        c.actual_director,
+        c.actual_deputy,
+        c.actual_teacher,
+        groupActualTotal,
+        groupVacantTeacher,
+        c.j18_paid_director,
+        c.j18_paid_deputy,
+        c.j18_paid_teacher,
+        groupJ18Total,
+        c.criteria_director,
+        c.criteria_deputy,
+        c.criteria_teacher,
+        groupCriteriaTotal,
+        groupDiffDirector,
+        groupDiffDeputy,
+        groupDiffTeacher,
+        groupDiffTotal,
+        c.royal_decree_teacher,
+        c.contract_teacher,
+        groupReality,
+      ];
+
+      row.getCell(1).value = 'รวม';
+      row.getCell(2).value = c.school_name;
+      row.getCell(3).value = c.district;
+
+      for (let col = 1; col <= 25; col++) {
+        const cell = row.getCell(col);
+        if (col >= 4) {
+          const cachedVal = cachedGroupValues[col - 4];
+          if (SUBTOTAL_LEAF_COLS.has(col)) {
+            const letter = COL_LETTERS[col - 1];
+            cell.value = {
+              formula: `SUBTOTAL(9,${letter}${firstGroupRow}:${letter}${lastGroupRow})`,
+              result: cachedVal,
+            };
+          } else {
+            cell.value = buildRowDerivedCellValue(col, rowNum, cachedVal) ?? cachedVal;
+          }
+          cell.numFmt = col === 10 ? '#,##0;-#,##0;""' : '#,##0';
+        }
+
+        cell.font = { name: 'Tahoma', size: 10, bold: true, color: { argb: 'FF000000' } };
+        cell.border = THIN_BLACK_BORDER;
+        cell.alignment = {
+          horizontal: col === 2 ? 'left' : 'center',
+          vertical: 'middle',
+        };
+
+        if (col === 10 && groupVacantTeacher > 0) {
+          cell.fill = FILLS.vacantGreen;
+        } else if (col === 13) {
+          cell.fill = FILLS.j18Teacher;
+        } else if (col === 17) {
+          cell.fill = FILLS.criteriaTeacher;
+        } else if (col === 21) {
+          cell.fill = FILLS.diffTeacher;
+        } else if (col === 25) {
+          cell.fill = FILLS.realityBlue;
+        } else {
+          cell.fill = FILLS.branchSubtotal;
+        }
       }
-    });
-  });
+    }
+  }
 
-  // Summary row at bottom
+  // Grand total row at bottom (SUBTOTAL(9,...) skips nested branch subtotal rows)
   if (records.length > 0) {
-    const lastDataRow = startRow + records.length - 1;
-    const totalRowNum = lastDataRow + 1;
+    const lastDataRow = currentRowNum - 1;
+    const totalRowNum = currentRowNum;
     const totalRow = sheet.getRow(totalRowNum);
     totalRow.height = 22;
 
@@ -361,11 +507,16 @@ export async function exportStaffingExcel(
     for (let col = 1; col <= 25; col++) {
       const cell = totalRow.getCell(col);
       if (col >= 4) {
-        const letter = COL_LETTERS[col - 1];
-        cell.value = {
-          formula: `SUM(${letter}${startRow}:${letter}${lastDataRow})`,
-          result: cachedTotals[col - 4],
-        };
+        const cachedVal = cachedTotals[col - 4];
+        if (SUBTOTAL_LEAF_COLS.has(col)) {
+          const letter = COL_LETTERS[col - 1];
+          cell.value = {
+            formula: `SUBTOTAL(9,${letter}${startRow}:${letter}${lastDataRow})`,
+            result: cachedVal,
+          };
+        } else {
+          cell.value = buildRowDerivedCellValue(col, totalRowNum, cachedVal) ?? cachedVal;
+        }
         cell.numFmt = '#,##0';
       }
       cell.font = { name: 'Tahoma', size: 10, bold: true, color: { argb: 'FF000000' } };
@@ -384,6 +535,33 @@ export async function exportStaffingExcel(
         cell.fill = FILLS.totalRow;
       }
     }
+
+    // Dynamic green conditional highlight on column J (ว่าง) whenever J > 0 or becomes empty after user edits H or M
+    sheet.addConditionalFormatting({
+      ref: `J${startRow}:J${lastDataRow}`,
+      rules: [
+        {
+          type: 'expression',
+          priority: 1,
+          formulae: [`AND(ISNUMBER(J${startRow}),J${startRow}>0)`],
+          style: {
+            fill: FILLS.vacantGreen,
+          },
+        },
+        {
+          type: 'expression',
+          priority: 2,
+          formulae: [`J${startRow}=""`],
+          style: {
+            fill: {
+              type: 'pattern',
+              pattern: 'solid',
+              fgColor: { argb: 'FFFFFFFF' },
+            },
+          },
+        },
+      ],
+    });
   }
 
   const buffer = await workbook.xlsx.writeBuffer();
