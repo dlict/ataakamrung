@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
-import { ArrowDownUp, Download, Search } from 'lucide-react';
+import { ArrowDownUp, Download, FileSpreadsheet, Search } from 'lucide-react';
 import type { SchoolStaffingRecord } from '../types/staffing';
+import { exportStaffingExcel } from '../utils/excelExport';
 import {
   formatDeficitPositionsText,
   formatNumber,
@@ -15,6 +16,7 @@ interface SchoolsTableViewProps {
   records: SchoolStaffingRecord[];
   totalPeriodRecords: number;
   periodLabel: string;
+  periodNote?: string;
   districts: string[];
   selectedDistrict: string;
   onSelectDistrict: (district: string) => void;
@@ -48,6 +50,7 @@ export function SchoolsTableView({
   records,
   totalPeriodRecords,
   periodLabel,
+  periodNote,
   districts,
   selectedDistrict,
   onSelectDistrict,
@@ -61,6 +64,7 @@ export function SchoolsTableView({
   const [columnGroup, setColumnGroup] = useState<ColumnGroup>('summary');
   const [sortField, setSortField] = useState<SortField>('seq_no');
   const [sortAsc, setSortAsc] = useState(true);
+  const [exportingExcel, setExportingExcel] = useState(false);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -185,6 +189,20 @@ export function SchoolsTableView({
     URL.revokeObjectURL(url);
   }
 
+  async function handleExportExcel() {
+    if (filtered.length === 0 || exportingExcel) return;
+    setExportingExcel(true);
+    try {
+      await exportStaffingExcel(filtered, {
+        periodLabel,
+        periodNote,
+        districtFilter: selectedDistrict,
+      });
+    } finally {
+      setExportingExcel(false);
+    }
+  }
+
   return (
     <section className="rounded-lg border border-[#E5E7EB] bg-white">
       {/* Controls Header */}
@@ -208,6 +226,15 @@ export function SchoolsTableView({
                 <span>เปรียบเทียบ ({compareCodes.length}/6 แห่ง)</span>
               </button>
             )}
+            <button
+              type="button"
+              onClick={handleExportExcel}
+              disabled={filtered.length === 0 || exportingExcel}
+              className="inline-flex h-10 items-center justify-center gap-1.5 rounded-md border border-[#15803D] bg-[#16A34A] px-3.5 text-sm font-medium text-white transition-colors hover:bg-[#15803D] disabled:opacity-50 whitespace-nowrap shrink-0"
+            >
+              <FileSpreadsheet className="h-4 w-4" aria-hidden="true" />
+              <span>{exportingExcel ? 'กำลังสร้างไฟล์...' : 'ส่งออก Excel (.xlsx)'}</span>
+            </button>
             <button
               type="button"
               onClick={handleExportCsv}

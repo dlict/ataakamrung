@@ -358,6 +358,7 @@ export default function App() {
                 records={filteredRecords}
                 totalPeriodRecords={records.length}
                 periodLabel={currentPeriodLabel}
+                periodNote={currentPeriod?.period_note}
                 districts={districts}
                 selectedDistrict={selectedDistrict}
                 onSelectDistrict={setSelectedDistrict}
