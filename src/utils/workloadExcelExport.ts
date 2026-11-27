@@ -1,6 +1,8 @@
 import ExcelJS from 'exceljs';
 import type { SchoolStaffingRecord } from '../types/staffing';
 import {
+  buildExcelRoomFormula,
+  computeRoomsForGrade,
   computeWorkloadTotals,
   formatSchoolFullName,
   LOWER_SECONDARY_GRADES,
@@ -8,6 +10,7 @@ import {
   PRIMARY_GRADES,
   UPPER_SECONDARY_GRADES,
   type GradeCountsMap,
+  type GradeKey,
   type WorkloadSignOffMeta,
   type WorkloadStaffingInput,
 } from './workloadFormTypes';
@@ -152,16 +155,29 @@ export async function exportWorkloadExcel({
 
   // Left Table Data (Rows 10-21)
   const leftRows: Array<
-    | { type: 'grade'; rowNum: number; label: string; students: number; rooms: number; maxPerRoom: number; isFirst?: boolean; isLast?: boolean }
+    | {
+        type: 'grade';
+        key: GradeKey;
+        rowNum: number;
+        label: string;
+        students: number;
+        rooms: number;
+        basePerRoom: number;
+        remainderThreshold: number;
+        isFirst?: boolean;
+        isLast?: boolean;
+      }
     | { type: 'sum'; rowNum: number; label: string; stuFormula: string; roomFormula: string; students: number; rooms: number }
   > = [
     ...PRE_PRIMARY_GRADES.map((g, idx) => ({
       type: 'grade' as const,
+      key: g.key,
       rowNum: 10 + idx,
       label: g.label,
       students: grades[g.key].students,
       rooms: grades[g.key].rooms,
-      maxPerRoom: g.maxPerRoom,
+      basePerRoom: g.basePerRoom,
+      remainderThreshold: g.remainderThreshold,
       isFirst: idx === 0,
       isLast: idx === PRE_PRIMARY_GRADES.length - 1,
     })),
@@ -176,11 +192,13 @@ export async function exportWorkloadExcel({
     },
     ...PRIMARY_GRADES.map((g, idx) => ({
       type: 'grade' as const,
+      key: g.key,
       rowNum: 14 + idx,
       label: g.label,
       students: grades[g.key].students,
       rooms: grades[g.key].rooms,
-      maxPerRoom: g.maxPerRoom,
+      basePerRoom: g.basePerRoom,
+      remainderThreshold: g.remainderThreshold,
       isFirst: idx === 0,
       isLast: idx === PRIMARY_GRADES.length - 1,
     })),
@@ -213,12 +231,15 @@ export async function exportWorkloadExcel({
     if (item.type === 'grade') {
       cLabel.value = item.label;
       cStu.value = item.students;
-      const autoRooms =
-        item.students > 0 ? Math.ceil(item.students / item.maxPerRoom) : 0;
+      const autoRooms = computeRoomsForGrade(item.key, item.students);
       cRoom.value =
         item.rooms === autoRooms
           ? {
-              formula: `IF(D${item.rowNum}>0,ROUNDUP(D${item.rowNum}/${item.maxPerRoom},0),0)`,
+              formula: buildExcelRoomFormula(
+                `D${item.rowNum}`,
+                item.basePerRoom,
+                item.remainderThreshold
+              ),
               result: item.rooms,
             }
           : item.rooms;
@@ -262,16 +283,29 @@ export async function exportWorkloadExcel({
 
   // Right Table Data (Rows 10-19)
   const rightRows: Array<
-    | { type: 'grade'; rowNum: number; label: string; students: number; rooms: number; maxPerRoom: number; isFirst?: boolean; isLast?: boolean }
+    | {
+        type: 'grade';
+        key: GradeKey;
+        rowNum: number;
+        label: string;
+        students: number;
+        rooms: number;
+        basePerRoom: number;
+        remainderThreshold: number;
+        isFirst?: boolean;
+        isLast?: boolean;
+      }
     | { type: 'sum'; rowNum: number; label: string; stuFormula: string; roomFormula: string; students: number; rooms: number }
   > = [
     ...LOWER_SECONDARY_GRADES.map((g, idx) => ({
       type: 'grade' as const,
+      key: g.key,
       rowNum: 10 + idx,
       label: g.label,
       students: grades[g.key].students,
       rooms: grades[g.key].rooms,
-      maxPerRoom: g.maxPerRoom,
+      basePerRoom: g.basePerRoom,
+      remainderThreshold: g.remainderThreshold,
       isFirst: idx === 0,
       isLast: idx === LOWER_SECONDARY_GRADES.length - 1,
     })),
@@ -286,11 +320,13 @@ export async function exportWorkloadExcel({
     },
     ...UPPER_SECONDARY_GRADES.map((g, idx) => ({
       type: 'grade' as const,
+      key: g.key,
       rowNum: 14 + idx,
       label: g.label,
       students: grades[g.key].students,
       rooms: grades[g.key].rooms,
-      maxPerRoom: g.maxPerRoom,
+      basePerRoom: g.basePerRoom,
+      remainderThreshold: g.remainderThreshold,
       isFirst: idx === 0,
       isLast: idx === UPPER_SECONDARY_GRADES.length - 1,
     })),
@@ -333,12 +369,15 @@ export async function exportWorkloadExcel({
     if (item.type === 'grade') {
       cLabelG.value = item.label;
       cStu.value = item.students;
-      const autoRooms =
-        item.students > 0 ? Math.ceil(item.students / item.maxPerRoom) : 0;
+      const autoRooms = computeRoomsForGrade(item.key, item.students);
       cRoom.value =
         item.rooms === autoRooms
           ? {
-              formula: `IF(I${item.rowNum}>0,ROUNDUP(I${item.rowNum}/${item.maxPerRoom},0),0)`,
+              formula: buildExcelRoomFormula(
+                `I${item.rowNum}`,
+                item.basePerRoom,
+                item.remainderThreshold
+              ),
               result: item.rooms,
             }
           : item.rooms;
@@ -478,49 +517,43 @@ export async function exportWorkloadExcel({
     cell.border = { top: THIN_BLACK, left: THIN_BLACK, bottom: THIN_BLACK, right: THIN_BLACK };
   });
 
-  // Row 28 spacer & Row 29 Red Note
-  sheet.getRow(28).height = 10;
-  sheet.getRow(29).height = 24;
-  sheet.mergeCells('B29:J29');
-  const noteCell = sheet.getCell('B29');
-  noteCell.value = `หมายเหตุ   ${meta.note}`;
-  noteCell.font = { name: FONT_NAME, size: 15, color: { argb: 'FFFF0000' } };
-  noteCell.alignment = { horizontal: 'left', vertical: 'middle', wrapText: true };
+  // Row 28 spacer
+  sheet.getRow(28).height = 14;
 
-  // Rows 30-34: Certification Box (G30:J34)
-  sheet.getRow(30).height = 23;
-  sheet.getRow(31).height = 26;
+  // Rows 29-33: Certification Box (G29:J33)
+  sheet.getRow(29).height = 23;
+  sheet.getRow(30).height = 26;
+  sheet.getRow(31).height = 22;
   sheet.getRow(32).height = 22;
-  sheet.getRow(33).height = 22;
-  sheet.getRow(34).height = 42;
+  sheet.getRow(33).height = 42;
 
+  sheet.mergeCells('G29:J29');
+  sheet.getCell('G29').value = 'ขอรับรองว่าข้อมูลถูกต้อง';
   sheet.mergeCells('G30:J30');
-  sheet.getCell('G30').value = 'ขอรับรองว่าข้อมูลถูกต้อง';
   sheet.mergeCells('G31:J31');
+  sheet.getCell('G31').value = 'ลงชื่อ ..................................................';
   sheet.mergeCells('G32:J32');
-  sheet.getCell('G32').value = 'ลงชื่อ ..................................................';
+  sheet.getCell('G32').value = `(${meta.signerName})`;
   sheet.mergeCells('G33:J33');
-  sheet.getCell('G33').value = `(${meta.signerName})`;
-  sheet.mergeCells('G34:J34');
-  sheet.getCell('G34').value = `ตำแหน่ง ${meta.signerPosition}\n${meta.signDate}`;
+  sheet.getCell('G33').value = `ตำแหน่ง ${meta.signerPosition}\n${meta.signDate}`;
 
-  for (let r = 30; r <= 34; r++) {
+  for (let r = 29; r <= 33; r++) {
     for (let c = 7; c <= 10; c++) {
       const cell = sheet.getCell(r, c);
       cell.font = { name: FONT_NAME, size: 15, color: { argb: 'FF000000' } };
       cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
       cell.border = {
-        top: r === 30 ? THIN_BLACK : undefined,
-        bottom: r === 34 ? THIN_BLACK : undefined,
+        top: r === 29 ? THIN_BLACK : undefined,
+        bottom: r === 33 ? THIN_BLACK : undefined,
         left: c === 7 ? THIN_BLACK : undefined,
         right: c === 10 ? THIN_BLACK : undefined,
       };
     }
   }
 
-  // Row 35: Yellow Formula Legend
-  sheet.getRow(35).height = 22;
-  const legendBox = sheet.getCell('C35');
+  // Row 34: Yellow Formula Legend
+  sheet.getRow(34).height = 22;
+  const legendBox = sheet.getCell('C34');
   legendBox.fill = FILLS.formulaYellow;
   legendBox.border = {
     top: THIN_BLACK,
@@ -528,8 +561,8 @@ export async function exportWorkloadExcel({
     left: THIN_BLACK,
     right: THIN_BLACK,
   };
-  sheet.mergeCells('D35:G35');
-  const legendText = sheet.getCell('D35');
+  sheet.mergeCells('D34:G34');
+  const legendText = sheet.getCell('D34');
   legendText.value = 'คือ แถบสูตรการคำนวณ ห้ามลบหรือแก้ไข';
   legendText.font = { name: FONT_NAME, size: 15, color: { argb: 'FF000000' } };
   legendText.alignment = { horizontal: 'left', vertical: 'middle' };

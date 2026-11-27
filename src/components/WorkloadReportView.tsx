@@ -20,12 +20,17 @@ import {
 import { parseJsonResponse } from '../utils/api';
 import { decodeCsvFile } from '../utils/csvParser';
 import { formatNumber } from '../utils/formatters';
-import { breakdownToGradeCounts, parseSchoolMisCsv } from '../utils/schoolmisParser';
+import {
+  breakdownToGradeCounts,
+  normalizeSchoolName,
+  parseSchoolMisCsv,
+} from '../utils/schoolmisParser';
 import { exportWorkloadExcel } from '../utils/workloadExcelExport';
 import {
   ALL_GRADES,
   autoComputeRoomsFromStudents,
   buildDefaultStaffingFromRecord,
+  computeRoomsForGrade,
   computeWorkloadTotals,
   createEmptyGradeCounts,
   formatSchoolFullName,
@@ -165,6 +170,11 @@ export function WorkloadReportView({
     [studentBreakdowns]
   );
 
+  const breakdownByName = useMemo(
+    () => new Map(studentBreakdowns.map((b) => [normalizeSchoolName(b.school_name), b])),
+    [studentBreakdowns]
+  );
+
   const filteredSchools = useMemo(() => {
     const q = schoolSearch.trim().toLowerCase();
     if (!q) return records;
@@ -191,7 +201,10 @@ export function WorkloadReportView({
     [records, selectedCode]
   );
 
-  const schoolBreakdown = school ? breakdownByCode.get(school.school_code) : undefined;
+  const schoolBreakdown = school
+    ? breakdownByCode.get(school.school_code) ??
+      breakdownByName.get(normalizeSchoolName(school.school_name))
+    : undefined;
   const savedEntry = school ? storedByCode[school.school_code] : undefined;
   const grades: GradeCountsMap = hasAnyGradeCount(savedEntry?.grades)
     ? savedEntry!.grades
@@ -258,8 +271,6 @@ export function WorkloadReportView({
     rawValue: string
   ) {
     const val = Math.max(0, Number.parseInt(rawValue || '0', 10) || 0);
-    const maxPerRoom =
-      ALL_GRADES.find((g) => g.key === key)?.maxPerRoom ?? 36;
 
     setCalcFeedback(null);
     updateSchoolState((prev) => {
@@ -268,7 +279,7 @@ export function WorkloadReportView({
         field === 'students'
           ? {
               students: val,
-              rooms: val > 0 ? Math.ceil(val / maxPerRoom) : 0,
+              rooms: computeRoomsForGrade(key, val),
             }
           : {
               ...current,
@@ -395,10 +406,20 @@ export function WorkloadReportView({
 
       // Clear cached manual grade overrides for schools in the newly imported CSV
       const importedCodes = new Set(parsed.records.map((r) => r.school_code));
+      const importedNames = new Set(parsed.records.map((r) => normalizeSchoolName(r.school_name)));
+      const matchedRecordCodes = new Set(
+        records
+          .filter(
+            (r) =>
+              importedCodes.has(r.school_code) ||
+              importedNames.has(normalizeSchoolName(r.school_name))
+          )
+          .map((r) => r.school_code)
+      );
       setStoredByCode((prev) => {
         const next: Record<string, SavedSchoolWorkload> = {};
         for (const [code, entry] of Object.entries(prev)) {
-          if (importedCodes.has(code)) {
+          if (importedCodes.has(code) || matchedRecordCodes.has(code)) {
             if (entry.deductRetire || entry.staffingOverride) {
               next[code] = {
                 grades: createEmptyGradeCounts(),
@@ -586,7 +607,7 @@ export function WorkloadReportView({
             <button
               type="button"
               onClick={handleAutoComputeRooms}
-              title="คำนวณจำนวนห้องเรียนจากจำนวนนักเรียนตามเกณฑ์มาตรฐาน (อนุบาล 30 / ประถม 36 / มัธยม 40)"
+              title="คำนวณจำนวนห้องเรียนตามเกณฑ์ (อนุบาล/ประถม 30 คน/ห้อง เศษ ≥10 นับ 1 ห้อง · มัธยม 40 คน/ห้อง เศษ ≥5 นับ 1 ห้อง)"
               className="inline-flex h-10 items-center gap-1.5 rounded-md border border-[#D1D5DB] bg-white px-3 text-sm font-medium text-[#111827] transition-colors hover:bg-[#F9FAFB] whitespace-nowrap"
             >
               <Calculator className="h-4 w-4 text-[#6B7280]" aria-hidden="true" />
@@ -683,7 +704,7 @@ export function WorkloadReportView({
             className="inline-flex items-center gap-1.5 text-sm font-medium text-[#1E3A8A] hover:underline"
           >
             <SlidersHorizontal className="h-4 w-4" aria-hidden="true" />
-            <span>{showMetaEditor ? 'ซ่อนการตั้งค่าผู้ลงนาม/หมายเหตุ' : 'แก้ไขหมายเหตุและผู้ลงนามรับรอง'}</span>
+            <span>{showMetaEditor ? 'ซ่อนการตั้งค่าผู้ลงนามรับรอง' : 'แก้ไขผู้ลงนามและวันที่รับรอง'}</span>
           </button>
         </div>
 
@@ -702,17 +723,6 @@ export function WorkloadReportView({
 
         {showMetaEditor && (
           <div className="mt-4 grid grid-cols-1 gap-3 border-t border-[#F3F4F6] pt-4 sm:grid-cols-2 lg:grid-cols-12">
-            <div className="sm:col-span-2 lg:col-span-12">
-              <label className="block text-xs font-medium text-[#4B5563]">
-                ข้อความหมายเหตุ (ตัวหนังสือสีแดง)
-              </label>
-              <input
-                type="text"
-                value={meta.note}
-                onChange={(e) => updateMeta({ note: e.target.value })}
-                className="mt-1 h-9 w-full rounded-md border border-[#D1D5DB] px-3 text-sm text-[#111827] focus:border-[#1E3A8A] focus:outline-none"
-              />
-            </div>
             <div className="lg:col-span-4">
               <label className="block text-xs font-medium text-[#4B5563]">
                 ชื่อผู้ลงนามรับรอง
@@ -1296,21 +1306,8 @@ export function WorkloadReportView({
           </div>
         </div>
 
-        {/* Red Note (inline editable on screen, plain text on print) */}
-        <div className="mt-3 flex items-baseline gap-2 text-[16px] font-bold text-[#FF0000] print:mt-2 print:text-[13.5px]">
-          <span className="shrink-0">หมายเหตุ</span>
-          <input
-            type="text"
-            aria-label="ข้อความหมายเหตุในแบบฟอร์ม"
-            value={meta.note}
-            onChange={(e) => updateMeta({ note: e.target.value })}
-            className="min-w-0 flex-1 border-b border-dashed border-transparent bg-transparent px-1 py-0 text-[16px] font-bold text-[#FF0000] hover:border-[#FCA5A5] focus:border-[#FF0000] focus:bg-[#FEF2F2] focus:outline-none print:hidden"
-          />
-          <span className="hidden print:inline">{meta.note}</span>
-        </div>
-
         {/* Certification Signature Box (inline editable name, position, date) */}
-        <div className="mt-2.5 flex justify-end print:mt-2">
+        <div className="mt-4 flex justify-end print:mt-3">
           <div className="w-full max-w-[310px] border border-black px-4 py-2.5 text-center text-[16px] leading-[1.35] print:max-w-[270px] print:py-2 print:text-[13.5px] print:leading-[1.25]">
             <p>ขอรับรองว่าข้อมูลถูกต้อง</p>
             <div className="h-6 print:h-5" />

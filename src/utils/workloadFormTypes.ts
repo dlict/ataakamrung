@@ -46,39 +46,70 @@ export interface SavedSchoolWorkload {
   staffingOverride?: Partial<WorkloadStaffingInput>;
 }
 
-export const PRE_PRIMARY_GRADES: ReadonlyArray<{ key: GradeKey; label: string; maxPerRoom: number }> = [
-  { key: 'k0', label: 'อนุบาล 3 ขวบ', maxPerRoom: 30 },
-  { key: 'k1', label: 'อนุบาล ปีที่ 1', maxPerRoom: 30 },
-  { key: 'k2', label: 'อนุบาล ปีที่ 2', maxPerRoom: 30 },
+export interface GradeRuleMeta {
+  key: GradeKey;
+  label: string;
+  basePerRoom: number;
+  remainderThreshold: number;
+}
+
+export const PRE_PRIMARY_GRADES: ReadonlyArray<GradeRuleMeta> = [
+  { key: 'k0', label: 'อนุบาล 3 ขวบ', basePerRoom: 30, remainderThreshold: 10 },
+  { key: 'k1', label: 'อนุบาล ปีที่ 1', basePerRoom: 30, remainderThreshold: 10 },
+  { key: 'k2', label: 'อนุบาล ปีที่ 2', basePerRoom: 30, remainderThreshold: 10 },
 ];
 
-export const PRIMARY_GRADES: ReadonlyArray<{ key: GradeKey; label: string; maxPerRoom: number }> = [
-  { key: 'p1', label: 'ประถมศึกษา ปีที่ 1', maxPerRoom: 36 },
-  { key: 'p2', label: 'ประถมศึกษา ปีที่ 2', maxPerRoom: 36 },
-  { key: 'p3', label: 'ประถมศึกษา ปีที่ 3', maxPerRoom: 36 },
-  { key: 'p4', label: 'ประถมศึกษา ปีที่ 4', maxPerRoom: 36 },
-  { key: 'p5', label: 'ประถมศึกษา ปีที่ 5', maxPerRoom: 36 },
-  { key: 'p6', label: 'ประถมศึกษา ปีที่ 6', maxPerRoom: 36 },
+export const PRIMARY_GRADES: ReadonlyArray<GradeRuleMeta> = [
+  { key: 'p1', label: 'ประถมศึกษา ปีที่ 1', basePerRoom: 30, remainderThreshold: 10 },
+  { key: 'p2', label: 'ประถมศึกษา ปีที่ 2', basePerRoom: 30, remainderThreshold: 10 },
+  { key: 'p3', label: 'ประถมศึกษา ปีที่ 3', basePerRoom: 30, remainderThreshold: 10 },
+  { key: 'p4', label: 'ประถมศึกษา ปีที่ 4', basePerRoom: 30, remainderThreshold: 10 },
+  { key: 'p5', label: 'ประถมศึกษา ปีที่ 5', basePerRoom: 30, remainderThreshold: 10 },
+  { key: 'p6', label: 'ประถมศึกษา ปีที่ 6', basePerRoom: 30, remainderThreshold: 10 },
 ];
 
-export const LOWER_SECONDARY_GRADES: ReadonlyArray<{ key: GradeKey; label: string; maxPerRoom: number }> = [
-  { key: 'm1', label: 'มัธยมศึกษา ปีที่ 1', maxPerRoom: 40 },
-  { key: 'm2', label: 'มัธยมศึกษา ปีที่ 2', maxPerRoom: 40 },
-  { key: 'm3', label: 'มัธยมศึกษา ปีที่ 3', maxPerRoom: 40 },
+export const LOWER_SECONDARY_GRADES: ReadonlyArray<GradeRuleMeta> = [
+  { key: 'm1', label: 'มัธยมศึกษา ปีที่ 1', basePerRoom: 40, remainderThreshold: 5 },
+  { key: 'm2', label: 'มัธยมศึกษา ปีที่ 2', basePerRoom: 40, remainderThreshold: 5 },
+  { key: 'm3', label: 'มัธยมศึกษา ปีที่ 3', basePerRoom: 40, remainderThreshold: 5 },
 ];
 
-export const UPPER_SECONDARY_GRADES: ReadonlyArray<{ key: GradeKey; label: string; maxPerRoom: number }> = [
-  { key: 'm4', label: 'มัธยมศึกษา ปีที่ 4', maxPerRoom: 40 },
-  { key: 'm5', label: 'มัธยมศึกษา ปีที่ 5', maxPerRoom: 40 },
-  { key: 'm6', label: 'มัธยมศึกษา ปีที่ 6', maxPerRoom: 40 },
+export const UPPER_SECONDARY_GRADES: ReadonlyArray<GradeRuleMeta> = [
+  { key: 'm4', label: 'มัธยมศึกษา ปีที่ 4', basePerRoom: 40, remainderThreshold: 5 },
+  { key: 'm5', label: 'มัธยมศึกษา ปีที่ 5', basePerRoom: 40, remainderThreshold: 5 },
+  { key: 'm6', label: 'มัธยมศึกษา ปีที่ 6', basePerRoom: 40, remainderThreshold: 5 },
 ];
 
-export const ALL_GRADES = [
+export const ALL_GRADES: ReadonlyArray<GradeRuleMeta> = [
   ...PRE_PRIMARY_GRADES,
   ...PRIMARY_GRADES,
   ...LOWER_SECONDARY_GRADES,
   ...UPPER_SECONDARY_GRADES,
-] as const;
+];
+
+const GRADE_RULE_MAP = new Map<GradeKey, GradeRuleMeta>(
+  ALL_GRADES.map((g) => [g.key, g])
+);
+
+export function computeRoomsForGrade(key: GradeKey, studentsInput: number): number {
+  const students = Math.max(0, Math.round(studentsInput || 0));
+  if (students <= 0) return 0;
+  const rule = GRADE_RULE_MAP.get(key);
+  const base = rule?.basePerRoom ?? 30;
+  const rem = rule?.remainderThreshold ?? 10;
+  if (students < base + rem) return 1;
+  return Math.floor((students + (base - rem)) / base);
+}
+
+export function buildExcelRoomFormula(
+  studentCellRef: string,
+  basePerRoom: number,
+  remainderThreshold: number
+): string {
+  const oneRoomLimit = basePerRoom + remainderThreshold;
+  const offset = basePerRoom - remainderThreshold;
+  return `IF(${studentCellRef}=0,0,IF(${studentCellRef}<${oneRoomLimit},1,INT((${studentCellRef}+${offset})/${basePerRoom})))`;
+}
 
 export function createEmptyGradeCounts(): GradeCountsMap {
   return {
@@ -106,7 +137,7 @@ export function autoComputeRoomsFromStudents(grades: GradeCountsMap): GradeCount
     const students = Math.max(0, Math.round(grades[g.key].students || 0));
     next[g.key] = {
       students,
-      rooms: students > 0 ? Math.ceil(students / g.maxPerRoom) : 0,
+      rooms: computeRoomsForGrade(g.key, students),
     };
   }
   return next;

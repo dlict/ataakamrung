@@ -1,6 +1,13 @@
 import Papa from 'papaparse';
 import type { SchoolStudentBreakdown } from '../types/staffing';
-import type { GradeCountsMap } from './workloadFormTypes';
+import { computeRoomsForGrade, type GradeCountsMap } from './workloadFormTypes';
+
+export function normalizeSchoolName(name: string): string {
+  return String(name ?? '')
+    .trim()
+    .replace(/^โรงเรียน/, '')
+    .replace(/\s+/g, '');
+}
 
 function toInt(val: unknown): number {
   if (typeof val === 'number' && Number.isFinite(val)) return Math.max(0, Math.round(val));
@@ -119,20 +126,20 @@ export function parseSchoolMisCsv(
 
 export function breakdownToGradeCounts(record: SchoolStudentBreakdown): GradeCountsMap {
   return {
-    k0: { students: record.k0_students, rooms: record.k0_rooms },
-    k1: { students: record.k1_students, rooms: record.k1_rooms },
-    k2: { students: record.k2_students, rooms: record.k2_rooms },
-    p1: { students: record.p1_students, rooms: record.p1_rooms },
-    p2: { students: record.p2_students, rooms: record.p2_rooms },
-    p3: { students: record.p3_students, rooms: record.p3_rooms },
-    p4: { students: record.p4_students, rooms: record.p4_rooms },
-    p5: { students: record.p5_students, rooms: record.p5_rooms },
-    p6: { students: record.p6_students, rooms: record.p6_rooms },
-    m1: { students: record.m1_students, rooms: record.m1_rooms },
-    m2: { students: record.m2_students, rooms: record.m2_rooms },
-    m3: { students: record.m3_students, rooms: record.m3_rooms },
-    m4: { students: record.m4_students, rooms: record.m4_rooms },
-    m5: { students: record.m5_students, rooms: record.m5_rooms },
-    m6: { students: record.m6_students, rooms: record.m6_rooms },
+    k0: { students: record.k0_students, rooms: computeRoomsForGrade('k0', record.k0_students) },
+    k1: { students: record.k1_students, rooms: computeRoomsForGrade('k1', record.k1_students) },
+    k2: { students: record.k2_students, rooms: computeRoomsForGrade('k2', record.k2_students) },
+    p1: { students: record.p1_students, rooms: computeRoomsForGrade('p1', record.p1_students) },
+    p2: { students: record.p2_students, rooms: computeRoomsForGrade('p2', record.p2_students) },
+    p3: { students: record.p3_students, rooms: computeRoomsForGrade('p3', record.p3_students) },
+    p4: { students: record.p4_students, rooms: computeRoomsForGrade('p4', record.p4_students) },
+    p5: { students: record.p5_students, rooms: computeRoomsForGrade('p5', record.p5_students) },
+    p6: { students: record.p6_students, rooms: computeRoomsForGrade('p6', record.p6_students) },
+    m1: { students: record.m1_students, rooms: computeRoomsForGrade('m1', record.m1_students) },
+    m2: { students: record.m2_students, rooms: computeRoomsForGrade('m2', record.m2_students) },
+    m3: { students: record.m3_students, rooms: computeRoomsForGrade('m3', record.m3_students) },
+    m4: { students: record.m4_students, rooms: computeRoomsForGrade('m4', record.m4_students) },
+    m5: { students: record.m5_students, rooms: computeRoomsForGrade('m5', record.m5_students) },
+    m6: { students: record.m6_students, rooms: computeRoomsForGrade('m6', record.m6_students) },
   };
 }
