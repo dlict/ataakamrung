@@ -1063,76 +1063,116 @@ export function createApiApp(): Express {
 
   app.get('/api/student-breakdowns', async (req, res) => {
     try {
-      const semester = sanitizeText(req.query.semester, 32) || '2569-2';
+      const requestedSemester = sanitizeText(req.query.semester, 32);
       const status = await checkSupabaseStatus();
 
       if (!status.tablesReady || !status.studentBreakdownReady) {
         res.json({
           mode: 'preview',
           studentBreakdownReady: false,
-          seeded: false,
           semester: '2569-2',
+          semesters: ['2569-2'],
           records: SCHOOLMIS_2569_2_RECORDS,
         });
         return;
       }
 
       const client = getSupabaseClient()!;
-      const { data, error } = await client
+      const { data: semRows, error: semErr } = await client
+        .from('school_student_breakdowns')
+        .select('semester')
+        .range(0, 4999);
+
+      if (semErr) {
+        throw new Error(semErr.message);
+      }
+
+      const semesters = Array.from(
+        new Set((semRows ?? []).map((r) => String(r.semester || '')).filter(Boolean))
+      ).sort((a, b) => b.localeCompare(a));
+
+      const effectiveSemester =
+        requestedSemester === 'all'
+          ? 'all'
+          : requestedSemester && semesters.includes(requestedSemester)
+            ? requestedSemester
+            : requestedSemester || semesters[0] || '2569-2';
+
+      let query = client
         .from('school_student_breakdowns')
         .select('*')
-        .eq('semester', semester)
         .order('school_code', { ascending: true })
         .range(0, 4999);
 
-      if (error) {
-        throw new Error(error.message);
+      if (effectiveSemester !== 'all') {
+        query = query.eq('semester', effectiveSemester);
       }
 
-      if ((data ?? []).length === 0 && semester === '2569-2') {
-        const seedPayload = SCHOOLMIS_2569_2_RECORDS.map((r) => ({
-          ...r,
-          updated_at: new Date().toISOString(),
-        }));
-        const { error: seedErr } = await client
-          .from('school_student_breakdowns')
-          .upsert(seedPayload, { onConflict: 'semester,school_code' });
-
-        if (seedErr) {
-          throw new Error(seedErr.message);
-        }
-
-        const { data: seededRows, error: seededFetchErr } = await client
-          .from('school_student_breakdowns')
-          .select('*')
-          .eq('semester', semester)
-          .order('school_code', { ascending: true })
-          .range(0, 4999);
-
-        if (seededFetchErr) {
-          throw new Error(seededFetchErr.message);
-        }
-
-        res.json({
-          mode: 'supabase',
-          studentBreakdownReady: true,
-          seeded: true,
-          semester,
-          records: seededRows ?? SCHOOLMIS_2569_2_RECORDS,
-        });
-        return;
+      const { data, error } = await query;
+      if (error) {
+        throw new Error(error.message);
       }
 
       res.json({
         mode: 'supabase',
         studentBreakdownReady: true,
-        seeded: false,
-        semester,
+        semester: effectiveSemester,
+        semesters,
         records: data ?? [],
       });
     } catch (err) {
       res.status(500).json({
         error: err instanceof Error ? err.message : 'ไม่สามารถโหลดข้อมูลนักเรียนแยกชั้นได้',
+      });
+    }
+  });
+
+  app.post('/api/student-breakdowns/seed', async (_req, res) => {
+    try {
+      const status = await checkSupabaseStatus();
+      if (!status.tablesReady || !status.studentBreakdownReady) {
+        res.status(503).json({
+          error:
+            'ยังไม่ได้สร้างตาราง school_student_breakdowns ใน Supabase กรุณารันคำสั่ง SQL ล่าสุดใน Supabase SQL Editor ก่อน',
+        });
+        return;
+      }
+
+      const client = getSupabaseClient()!;
+      const now = new Date().toISOString();
+      const seedPayload = SCHOOLMIS_2569_2_RECORDS.map((r) => ({
+        ...r,
+        updated_at: now,
+      }));
+      const { error: seedErr } = await client
+        .from('school_student_breakdowns')
+        .upsert(seedPayload, { onConflict: 'semester,school_code' });
+
+      if (seedErr) {
+        throw new Error(seedErr.message);
+      }
+
+      const { data: savedRows, error: fetchErr } = await client
+        .from('school_student_breakdowns')
+        .select('*')
+        .eq('semester', '2569-2')
+        .order('school_code', { ascending: true })
+        .range(0, 4999);
+
+      if (fetchErr) {
+        throw new Error(fetchErr.message);
+      }
+
+      res.status(201).json({
+        ok: true,
+        mode: 'supabase',
+        semester: '2569-2',
+        count: (savedRows ?? seedPayload).length,
+        records: savedRows ?? seedPayload,
+      });
+    } catch (err) {
+      res.status(500).json({
+        error: err instanceof Error ? err.message : 'นำเข้าข้อมูลเริ่มต้น SchoolMIS ไม่สำเร็จ',
       });
     }
   });
@@ -1203,6 +1243,68 @@ export function createApiApp(): Express {
     } catch (err) {
       res.status(500).json({
         error: err instanceof Error ? err.message : 'บันทึกข้อมูลนักเรียนแยกชั้นลง Supabase ไม่สำเร็จ',
+      });
+    }
+  });
+
+  app.delete('/api/student-breakdowns/:id', async (req, res) => {
+    try {
+      const { id } = req.params;
+      const status = await checkSupabaseStatus();
+      if (!status.tablesReady || !status.studentBreakdownReady) {
+        res.status(503).json({ error: 'ไม่สามารถลบข้อมูลในโหมดตัวอย่างได้' });
+        return;
+      }
+
+      if (!UUID_REGEX.test(id)) {
+        res.status(400).json({ error: 'รหัสรายการโรงเรียนไม่ถูกต้อง' });
+        return;
+      }
+
+      const client = getSupabaseClient()!;
+      const { error } = await client
+        .from('school_student_breakdowns')
+        .delete()
+        .eq('id', id);
+
+      if (error) {
+        throw new Error(error.message);
+      }
+
+      res.json({ ok: true, deletedId: id });
+    } catch (err) {
+      res.status(500).json({
+        error: err instanceof Error ? err.message : 'ลบข้อมูลโรงเรียนไม่สำเร็จ',
+      });
+    }
+  });
+
+  app.delete('/api/student-breakdowns', async (req, res) => {
+    try {
+      const semester = sanitizeText(req.query.semester, 32);
+      const status = await checkSupabaseStatus();
+      if (!status.tablesReady || !status.studentBreakdownReady) {
+        res.status(503).json({ error: 'ไม่สามารถลบข้อมูลในโหมดตัวอย่างได้' });
+        return;
+      }
+
+      const client = getSupabaseClient()!;
+      let query = client.from('school_student_breakdowns').delete();
+      if (semester && semester !== 'all') {
+        query = query.eq('semester', semester);
+      } else {
+        query = query.not('id', 'is', null);
+      }
+
+      const { error } = await query;
+      if (error) {
+        throw new Error(error.message);
+      }
+
+      res.json({ ok: true, deletedSemester: semester || 'all' });
+    } catch (err) {
+      res.status(500).json({
+        error: err instanceof Error ? err.message : 'ลบข้อมูลนักเรียนแยกชั้นไม่สำเร็จ',
       });
     }
   });

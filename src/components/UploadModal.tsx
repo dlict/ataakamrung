@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { FileSpreadsheet, GraduationCap, Upload, Users, X } from 'lucide-react';
 import {
   THAI_MONTHS,
@@ -30,6 +30,7 @@ interface UploadModalProps {
   onClose: () => void;
   existingPeriods: ReportPeriod[];
   supabaseStatus: SupabaseStatus | null;
+  initialMode?: UploadMode;
   onSuccess: (savedPeriod: ReportPeriod) => void;
   onStudentBreakdownSuccess: (
     records: SchoolStudentBreakdown[],
@@ -43,11 +44,20 @@ export function UploadModal({
   onClose,
   existingPeriods,
   supabaseStatus,
+  initialMode = 'staffing',
   onSuccess,
   onStudentBreakdownSuccess,
   onOpenSetup,
 }: UploadModalProps) {
-  const [uploadMode, setUploadMode] = useState<UploadMode>('staffing');
+  const [uploadMode, setUploadMode] = useState<UploadMode>(initialMode);
+
+  useEffect(() => {
+    if (isOpen) {
+      setUploadMode(initialMode);
+      setParseError('');
+      setSubmitError('');
+    }
+  }, [isOpen, initialMode]);
 
   // Staffing CSV state
   const [buddhistYear, setBuddhistYear] = useState<number>(2569);

@@ -10,6 +10,7 @@ interface TopBarProps {
 const NAV_ITEMS: { id: ActiveTab; label: string }[] = [
   { id: 'overview', label: 'ภาพรวม' },
   { id: 'schools', label: 'รายชื่อโรงเรียน' },
+  { id: 'student-breakdowns', label: 'นักเรียนแยกชั้น' },
   { id: 'workload', label: 'ปริมาณงานสถานศึกษา' },
   { id: 'compare-schools', label: 'เทียบโรงเรียน' },
   { id: 'compare', label: 'เทียบรายงวด' },
@@ -29,7 +30,7 @@ export function TopBar({ activeTab, onTabChange, onOpenUpload }: TopBarProps) {
 
         <nav
           aria-label="หลัก"
-          className="hidden md:flex items-center gap-5 lg:gap-6 text-[15px] font-medium"
+          className="hidden md:flex items-center gap-3.5 lg:gap-5 text-[15px] font-medium"
         >
           {NAV_ITEMS.map((item) => {
             const isActive = activeTab === item.id;

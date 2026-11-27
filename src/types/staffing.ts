@@ -252,4 +252,10 @@ export interface SupabaseStatus {
   };
 }
 
-export type ActiveTab = 'overview' | 'schools' | 'workload' | 'compare-schools' | 'compare';
+export type ActiveTab =
+  | 'overview'
+  | 'schools'
+  | 'student-breakdowns'
+  | 'workload'
+  | 'compare-schools'
+  | 'compare';

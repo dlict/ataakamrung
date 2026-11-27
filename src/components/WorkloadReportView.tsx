@@ -51,6 +51,12 @@ interface WorkloadReportViewProps {
   supabaseStatus?: SupabaseStatus | null;
   initialBreakdowns?: SchoolStudentBreakdown[] | null;
   initialBreakdownMode?: 'supabase' | 'preview';
+  preferredSchoolCode?: string | null;
+  onConsumePreferredSchool?: () => void;
+  onBreakdownsUpdated?: (
+    records: SchoolStudentBreakdown[],
+    mode: 'supabase' | 'preview'
+  ) => void;
   onOpenSetup?: () => void;
 }
 
@@ -67,28 +73,6 @@ function readStoredMap(): Record<string, SavedSchoolWorkload> {
   }
 }
 
-function readStoredMeta(defaultYear: number): WorkloadSignOffMeta {
-  const fallback: WorkloadSignOffMeta = {
-    note: `ข้อมูลนักเรียนและข้อมูลอัตรากำลังครู ณ ปัจจุบัน ทั้งนี้ ให้หักอัตราเกษียณอายุราชการ ปี ${defaultYear}`,
-    signerName: 'นางสาวกชนิภา คำมาสาร',
-    signerPosition: 'ผู้อำนวยการกลุ่มบริหารงานบุคคล',
-    signDate: `วันที่ 21 เดือน ตุลาคม พ.ศ. ${defaultYear}`,
-  };
-  try {
-    const raw = localStorage.getItem(STORAGE_META_KEY);
-    if (!raw) return fallback;
-    const parsed = JSON.parse(raw) as Partial<WorkloadSignOffMeta>;
-    return {
-      note: parsed.note ?? fallback.note,
-      signerName: parsed.signerName ?? fallback.signerName,
-      signerPosition: parsed.signerPosition ?? fallback.signerPosition,
-      signDate: parsed.signDate ?? fallback.signDate,
-    };
-  } catch {
-    return fallback;
-  }
-}
-
 function formatThaiTodayDate(): string {
   const now = new Date();
   const day = now.getDate();
@@ -96,6 +80,32 @@ function formatThaiTodayDate(): string {
     THAI_MONTHS.find((m) => m.value === now.getMonth() + 1)?.label ?? 'มกราคม';
   const buddhistYear = now.getFullYear() + 543;
   return `วันที่ ${day} เดือน ${monthLabel} พ.ศ. ${buddhistYear}`;
+}
+
+function readStoredMeta(defaultYear: number): WorkloadSignOffMeta {
+  const todayThai = formatThaiTodayDate();
+  const fallback: WorkloadSignOffMeta = {
+    note: `ข้อมูลนักเรียนและข้อมูลอัตรากำลังครู ณ ปัจจุบัน ทั้งนี้ ให้หักอัตราเกษียณอายุราชการ ปี ${defaultYear}`,
+    signerName: 'นางสาวกชนิภา คำมาสาร',
+    signerPosition: 'ผู้อำนวยการกลุ่มบริหารงานบุคคล',
+    signDate: todayThai,
+  };
+  try {
+    const raw = localStorage.getItem(STORAGE_META_KEY);
+    if (!raw) return fallback;
+    const parsed = JSON.parse(raw) as Partial<WorkloadSignOffMeta>;
+    const storedSignDate = parsed.signDate?.trim();
+    const isLegacyDefault =
+      !storedSignDate || /^วันที่ 21 เดือน ตุลาคม พ\.ศ\. \d+$/.test(storedSignDate);
+    return {
+      note: parsed.note ?? fallback.note,
+      signerName: parsed.signerName ?? fallback.signerName,
+      signerPosition: parsed.signerPosition ?? fallback.signerPosition,
+      signDate: isLegacyDefault ? todayThai : storedSignDate,
+    };
+  } catch {
+    return fallback;
+  }
 }
 
 function hasAnyGradeCount(grades?: GradeCountsMap): boolean {
@@ -111,6 +121,9 @@ export function WorkloadReportView({
   supabaseStatus = null,
   initialBreakdowns = null,
   initialBreakdownMode = 'preview',
+  preferredSchoolCode = null,
+  onConsumePreferredSchool,
+  onBreakdownsUpdated,
   onOpenSetup,
 }: WorkloadReportViewProps) {
   const [schoolSearch, setSchoolSearch] = useState('');
@@ -118,9 +131,14 @@ export function WorkloadReportView({
   const [storedByCode, setStoredByCode] = useState<Record<string, SavedSchoolWorkload>>(
     () => readStoredMap()
   );
-  const [studentBreakdowns, setStudentBreakdowns] = useState<SchoolStudentBreakdown[]>(
-    () => (initialBreakdowns && initialBreakdowns.length > 0 ? initialBreakdowns : SCHOOLMIS_2569_2_RECORDS)
-  );
+  const [studentBreakdowns, setStudentBreakdowns] = useState<SchoolStudentBreakdown[]>(() => {
+    if (initialBreakdownMode === 'supabase' && initialBreakdowns !== null) {
+      return initialBreakdowns;
+    }
+    return initialBreakdowns && initialBreakdowns.length > 0
+      ? initialBreakdowns
+      : SCHOOLMIS_2569_2_RECORDS;
+  });
   const [breakdownSource, setBreakdownSource] = useState<'supabase' | 'preview'>(initialBreakdownMode);
   const [uploadingMis, setUploadingMis] = useState(false);
   const [meta, setMeta] = useState<WorkloadSignOffMeta>(() =>
@@ -133,15 +151,21 @@ export function WorkloadReportView({
     text: string;
   } | null>(null);
   const firstStudentInputRef = useRef<HTMLInputElement | null>(null);
+  const formSheetRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
-    if (initialBreakdowns && initialBreakdowns.length > 0) {
+    if (initialBreakdowns === null) return;
+    if (initialBreakdownMode === 'supabase') {
+      setStudentBreakdowns(initialBreakdowns);
+      setBreakdownSource('supabase');
+    } else if (initialBreakdowns.length > 0) {
       setStudentBreakdowns(initialBreakdowns);
       setBreakdownSource(initialBreakdownMode);
     }
   }, [initialBreakdowns, initialBreakdownMode]);
 
   useEffect(() => {
+    if (initialBreakdowns !== null) return;
     let cancelled = false;
     async function loadBreakdowns() {
       try {
@@ -151,9 +175,14 @@ export function WorkloadReportView({
           mode?: 'supabase' | 'preview';
           records?: SchoolStudentBreakdown[];
         }>(res);
-        if (!cancelled && Array.isArray(data.records) && data.records.length > 0) {
-          setStudentBreakdowns(data.records);
-          setBreakdownSource(data.mode === 'supabase' ? 'supabase' : 'preview');
+        if (!cancelled && Array.isArray(data.records)) {
+          if (data.mode === 'supabase') {
+            setStudentBreakdowns(data.records);
+            setBreakdownSource('supabase');
+          } else if (data.records.length > 0) {
+            setStudentBreakdowns(data.records);
+            setBreakdownSource('preview');
+          }
         }
       } catch {
         // Keep bundled SchoolMIS 2569/2 fallback records silently
@@ -163,7 +192,7 @@ export function WorkloadReportView({
     return () => {
       cancelled = true;
     };
-  }, [supabaseStatus?.studentBreakdownReady]);
+  }, [initialBreakdowns, supabaseStatus?.studentBreakdownReady]);
 
   const breakdownByCode = useMemo(
     () => new Map(studentBreakdowns.map((b) => [b.school_code, b])),
@@ -178,12 +207,33 @@ export function WorkloadReportView({
   const filteredSchools = useMemo(() => {
     const q = schoolSearch.trim().toLowerCase();
     if (!q) return records;
-    return records.filter((r) =>
-      `${r.school_code} ${r.school_name} ${r.subdistrict} ${r.district}`
-        .toLowerCase()
-        .includes(q)
-    );
-  }, [records, schoolSearch]);
+    return records.filter((r) => {
+      const bd =
+        breakdownByCode.get(r.school_code) ??
+        breakdownByName.get(normalizeSchoolName(r.school_name));
+      const haystack = `${r.seq_no} ${r.school_code} ${bd?.school_code ?? ''} ${r.school_name} ${formatSchoolFullName(r.school_name)} ต.${r.subdistrict} อ.${r.district} ${r.subdistrict} ${r.district}`
+        .toLowerCase();
+      return haystack.includes(q);
+    });
+  }, [records, schoolSearch, breakdownByCode, breakdownByName]);
+
+  useEffect(() => {
+    if (preferredSchoolCode && records.some((r) => r.school_code === preferredSchoolCode)) {
+      setSelectedCode(preferredSchoolCode);
+      setSchoolSearch('');
+      setCalcFeedback(null);
+      onConsumePreferredSchool?.();
+    }
+  }, [preferredSchoolCode, records, onConsumePreferredSchool]);
+
+  useEffect(() => {
+    if (schoolSearch.trim() && filteredSchools.length > 0) {
+      if (!filteredSchools.some((r) => r.school_code === selectedCode)) {
+        setSelectedCode(filteredSchools[0].school_code);
+        setCalcFeedback(null);
+      }
+    }
+  }, [schoolSearch, filteredSchools, selectedCode]);
 
   useEffect(() => {
     if (records.length === 0) {
@@ -192,6 +242,7 @@ export function WorkloadReportView({
     }
     if (!selectedCode || !records.some((r) => r.school_code === selectedCode)) {
       setSelectedCode(records[0].school_code);
+      setCalcFeedback(null);
     }
   }, [records, selectedCode]);
 
@@ -301,7 +352,7 @@ export function WorkloadReportView({
     if (totals.grandTotal.students === 0) {
       setCalcFeedback({
         type: 'warning',
-        text: `ยังไม่ได้กรอกจำนวนนักเรียนรายชั้น (ทุกชั้นเป็น 0) — กรุณากรอกจำนวนนักเรียนในช่องสีขาวรายชั้น ระบบจะคำนวณจำนวนห้องเรียนให้อัตโนมัติทันที (ยอดในระบบ: ${formatNumber(school.students_count)} นร. / ${formatNumber(school.classrooms_count)} ห้อง)`,
+        text: `${formatSchoolFullName(school.school_name)}: ยังไม่ได้กรอกจำนวนนักเรียนรายชั้น (ทุกชั้นเป็น 0) — กรุณากรอกจำนวนนักเรียนในช่องสีขาวรายชั้น ระบบจะคำนวณจำนวนห้องเรียนให้อัตโนมัติทันที (ยอดในระบบ: ${formatNumber(school.students_count)} นร. / ${formatNumber(school.classrooms_count)} ห้อง)`,
       });
       firstStudentInputRef.current?.focus();
       firstStudentInputRef.current?.select();
@@ -316,8 +367,9 @@ export function WorkloadReportView({
     }));
     setCalcFeedback({
       type: 'success',
-      text: `คำนวณจำนวนห้องเรียนตามเกณฑ์เรียบร้อยแล้ว (รวม ${formatNumber(nextTotals.grandTotal.students)} นร. · ${formatNumber(nextTotals.grandTotal.rooms)} ห้องเรียน)`,
+      text: `คำนวณจำนวนห้องเรียน "${formatSchoolFullName(school.school_name)}" ตามเกณฑ์เรียบร้อยแล้ว (รวม ${formatNumber(nextTotals.grandTotal.students)} นร. · ${formatNumber(nextTotals.grandTotal.rooms)} ห้องเรียน)`,
     });
+    formSheetRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   }
 
   function handleToggleDeductRetire(checked: boolean) {
@@ -459,11 +511,14 @@ export function WorkloadReportView({
         throw new Error(data.error || data.detail || 'ไม่สามารถบันทึกข้อมูล SchoolMIS ลงฐานข้อมูลได้');
       }
 
-      if (Array.isArray(data.records) && data.records.length > 0) {
-        setStudentBreakdowns(data.records);
-      }
+      const savedList =
+        Array.isArray(data.records) && data.records.length > 0
+          ? data.records
+          : parsed.records;
+      setStudentBreakdowns(savedList);
       const mode = data.mode === 'supabase' ? 'supabase' : 'preview';
       setBreakdownSource(mode);
+      onBreakdownsUpdated?.(savedList, mode);
 
       setCalcFeedback({
         type: mode === 'supabase' ? 'success' : 'warning',
@@ -568,25 +623,34 @@ export function WorkloadReportView({
         </div>
 
         <div className="mt-4 grid grid-cols-1 gap-3 border-t border-[#F3F4F6] pt-4 lg:grid-cols-12">
-          <div className="relative lg:col-span-4">
-            <Search
-              className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#9CA3AF]"
-              aria-hidden="true"
-            />
-            <input
-              type="search"
-              value={schoolSearch}
-              onChange={(e) => setSchoolSearch(e.target.value)}
-              placeholder="ค้นหาชื่อโรงเรียน รหัส หรือตำบล..."
-              className="h-10 w-full rounded-md border border-[#D1D5DB] bg-white pl-9 pr-3 text-sm text-[#111827] placeholder:text-[#9CA3AF] focus:border-[#1E3A8A] focus:outline-none"
-            />
+          <div className="lg:col-span-4">
+            <div className="relative h-10">
+              <Search
+                className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#9CA3AF]"
+                aria-hidden="true"
+              />
+              <input
+                type="search"
+                value={schoolSearch}
+                onChange={(e) => setSchoolSearch(e.target.value)}
+                placeholder="ค้นหาชื่อโรงเรียน รหัส หรือตำบล..."
+                className="h-10 w-full rounded-md border border-[#D1D5DB] bg-white pl-9 pr-3 text-sm text-[#111827] placeholder:text-[#9CA3AF] focus:border-[#1E3A8A] focus:outline-none"
+              />
+            </div>
           </div>
 
           <div className="lg:col-span-5">
             <select
               aria-label="เลือกสถานศึกษา"
-              value={school.school_code}
-              onChange={(e) => setSelectedCode(e.target.value)}
+              value={
+                filteredSchools.some((r) => r.school_code === school.school_code)
+                  ? school.school_code
+                  : filteredSchools[0]?.school_code ?? school.school_code
+              }
+              onChange={(e) => {
+                setSelectedCode(e.target.value);
+                setCalcFeedback(null);
+              }}
               className="h-10 w-full rounded-md border border-[#D1D5DB] bg-white px-3 text-sm text-[#111827] focus:border-[#1E3A8A] focus:outline-none"
             >
               {filteredSchools.length === 0 ? (
@@ -773,6 +837,8 @@ export function WorkloadReportView({
 
       {/* Official Single-Page A4 Portrait Form Sheet */}
       <section
+        key={school.school_code}
+        ref={formSheetRef}
         aria-label="แบบฟอร์มรายงานปริมาณงานของสถานศึกษา"
         className="font-sarabun mx-auto w-full max-w-[820px] rounded-lg border border-[#D1D5DB] bg-white p-5 text-[#000000] shadow-xs sm:p-8 print:max-w-none print:rounded-none print:border-none print:p-0 print:shadow-none"
       >

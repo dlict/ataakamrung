@@ -4,6 +4,7 @@ import { CompareSchoolsView } from './components/CompareSchoolsView';
 import { OverviewView } from './components/OverviewView';
 import { SchoolDetailDrawer } from './components/SchoolDetailDrawer';
 import { SchoolsTableView } from './components/SchoolsTableView';
+import { StudentBreakdownsView } from './components/StudentBreakdownsView';
 import { SupabaseSetupDrawer } from './components/SupabaseSetupDrawer';
 import { Toolbar } from './components/Toolbar';
 import { TopBar } from './components/TopBar';
@@ -21,6 +22,7 @@ import {
   computeSummaryFromRecords,
 } from './utils/csvParser';
 import { parseJsonResponse } from './utils/api';
+import { normalizeSchoolName } from './utils/schoolmisParser';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<ActiveTab>('overview');
@@ -34,6 +36,9 @@ export default function App() {
 
   const [studentBreakdowns, setStudentBreakdowns] = useState<SchoolStudentBreakdown[] | null>(null);
   const [studentBreakdownMode, setStudentBreakdownMode] = useState<'supabase' | 'preview'>('preview');
+  const [breakdownSemesters, setBreakdownSemesters] = useState<string[]>([]);
+  const [selectedBreakdownSemester, setSelectedBreakdownSemester] = useState<string>('2569-2');
+  const [loadingBreakdowns, setLoadingBreakdowns] = useState<boolean>(false);
 
   const [selectedDistrict, setSelectedDistrict] = useState<string>('all');
   const [selectedSize, setSelectedSize] = useState<string>('all');
@@ -41,7 +46,9 @@ export default function App() {
 
   const [compareSchoolCodes, setCompareSchoolCodes] = useState<string[]>([]);
   const [selectedSchool, setSelectedSchool] = useState<SchoolStaffingRecord | null>(null);
+  const [preferredWorkloadCode, setPreferredWorkloadCode] = useState<string | null>(null);
   const [isUploadOpen, setIsUploadOpen] = useState<boolean>(false);
+  const [uploadModalMode, setUploadModalMode] = useState<'staffing' | 'students'>('staffing');
   const [isSetupOpen, setIsSetupOpen] = useState<boolean>(false);
 
   const loadInitialData = useCallback(async (preferredPeriodId?: string) => {
@@ -67,11 +74,19 @@ export default function App() {
         try {
           const bdData = await parseJsonResponse<{
             mode?: 'supabase' | 'preview';
+            semester?: string;
+            semesters?: string[];
             records?: SchoolStudentBreakdown[];
           }>(breakdownsRes);
-          if (Array.isArray(bdData.records) && bdData.records.length > 0) {
+          if (Array.isArray(bdData.records)) {
             setStudentBreakdowns(bdData.records);
             setStudentBreakdownMode(bdData.mode === 'supabase' ? 'supabase' : 'preview');
+          }
+          if (Array.isArray(bdData.semesters)) {
+            setBreakdownSemesters(bdData.semesters);
+          }
+          if (bdData.semester) {
+            setSelectedBreakdownSemester(bdData.semester);
           }
         } catch {
           // Non-fatal; WorkloadReportView still keeps bundled fallback
@@ -254,19 +269,113 @@ export default function App() {
     await loadInitialData();
   }
 
+  function handleOpenUpload(mode: 'staffing' | 'students' = 'staffing') {
+    setUploadModalMode(mode);
+    setIsUploadOpen(true);
+  }
+
   function handleUploadSuccess(savedPeriod: ReportPeriod) {
     setIsUploadOpen(false);
     loadInitialData(savedPeriod.id);
     setActiveTab('overview');
   }
 
+  async function refreshBreakdowns(semester = selectedBreakdownSemester) {
+    setLoadingBreakdowns(true);
+    try {
+      const qs = semester ? `?semester=${encodeURIComponent(semester)}` : '';
+      const res = await fetch(`/api/student-breakdowns${qs}`);
+      if (!res.ok) return;
+      const bdData = await parseJsonResponse<{
+        mode?: 'supabase' | 'preview';
+        semester?: string;
+        semesters?: string[];
+        records?: SchoolStudentBreakdown[];
+      }>(res);
+      if (Array.isArray(bdData.records)) {
+        setStudentBreakdowns(bdData.records);
+        setStudentBreakdownMode(bdData.mode === 'supabase' ? 'supabase' : 'preview');
+      }
+      if (Array.isArray(bdData.semesters)) {
+        setBreakdownSemesters(bdData.semesters);
+      }
+      if (bdData.semester) {
+        setSelectedBreakdownSemester(bdData.semester);
+      }
+    } finally {
+      setLoadingBreakdowns(false);
+    }
+  }
+
+  async function handleSelectBreakdownSemester(sem: string) {
+    setSelectedBreakdownSemester(sem);
+    await refreshBreakdowns(sem);
+  }
+
+  async function handleDeleteStudentBreakdown(id: string) {
+    const res = await fetch(`/api/student-breakdowns/${id}`, { method: 'DELETE' });
+    const data = await parseJsonResponse<{ ok?: boolean; error?: string }>(res);
+    if (!res.ok) {
+      throw new Error(data.error || 'ไม่สามารถลบข้อมูลโรงเรียนได้');
+    }
+    setStudentBreakdowns((prev) => (prev ? prev.filter((r) => r.id !== id) : prev));
+    await refreshBreakdowns(selectedBreakdownSemester);
+  }
+
+  async function handleDeleteStudentSemester(semester: string) {
+    const qs =
+      semester && semester !== 'all' ? `?semester=${encodeURIComponent(semester)}` : '';
+    const res = await fetch(`/api/student-breakdowns${qs}`, { method: 'DELETE' });
+    const data = await parseJsonResponse<{ ok?: boolean; error?: string }>(res);
+    if (!res.ok) {
+      throw new Error(data.error || 'ไม่สามารถลบข้อมูลนักเรียนแยกชั้นได้');
+    }
+    await refreshBreakdowns(semester === 'all' ? '' : semester);
+  }
+
+  async function handleSeedDefaultBreakdowns() {
+    const res = await fetch('/api/student-breakdowns/seed', { method: 'POST' });
+    const data = await parseJsonResponse<{
+      ok?: boolean;
+      mode?: 'supabase' | 'preview';
+      semester?: string;
+      records?: SchoolStudentBreakdown[];
+      error?: string;
+    }>(res);
+    if (!res.ok) {
+      throw new Error(data.error || 'ไม่สามารถกู้คืนข้อมูลเริ่มต้น SchoolMIS ได้');
+    }
+    setSelectedBreakdownSemester(data.semester || '2569-2');
+    await refreshBreakdowns(data.semester || '2569-2');
+  }
+
   function handleStudentBreakdownSuccess(
     savedRecords: SchoolStudentBreakdown[],
     mode: 'supabase' | 'preview'
   ) {
+    const uploadedSem = savedRecords[0]?.semester || '2569-2';
     setStudentBreakdowns(savedRecords);
     setStudentBreakdownMode(mode);
+    setSelectedBreakdownSemester(uploadedSem);
+    setBreakdownSemesters((prev) =>
+      prev.includes(uploadedSem) ? prev : [uploadedSem, ...prev].sort((a, b) => b.localeCompare(a))
+    );
     setIsUploadOpen(false);
+    setActiveTab('student-breakdowns');
+  }
+
+  function handleOpenWorkloadFromBreakdown(row: SchoolStudentBreakdown) {
+    const match =
+      records.find((r) => r.school_code === row.school_code) ??
+      records.find(
+        (r) => normalizeSchoolName(r.school_name) === normalizeSchoolName(row.school_name)
+      );
+    if (match) {
+      if (!filteredRecords.some((r) => r.school_code === match.school_code)) {
+        handleResetFilters();
+      }
+      setPreferredWorkloadCode(match.school_code);
+    }
     setActiveTab('workload');
   }
 
@@ -275,7 +384,7 @@ export default function App() {
       <TopBar
         activeTab={activeTab}
         onTabChange={setActiveTab}
-        onOpenUpload={() => setIsUploadOpen(true)}
+        onOpenUpload={() => handleOpenUpload('staffing')}
       />
 
       {periods.length > 0 && (
@@ -343,6 +452,23 @@ export default function App() {
             </div>
             <div className="h-72 animate-pulse rounded-lg border border-[#E5E7EB] bg-white" />
           </div>
+        ) : activeTab === 'student-breakdowns' ? (
+          <StudentBreakdownsView
+            records={studentBreakdowns ?? []}
+            staffingRecords={records}
+            semesters={breakdownSemesters}
+            selectedSemester={selectedBreakdownSemester}
+            mode={studentBreakdownMode}
+            supabaseStatus={supabaseStatus}
+            loading={loadingBreakdowns}
+            onSelectSemester={handleSelectBreakdownSemester}
+            onOpenUploadStudents={() => handleOpenUpload('students')}
+            onDeleteRecord={handleDeleteStudentBreakdown}
+            onDeleteSemester={handleDeleteStudentSemester}
+            onSeedDefault={handleSeedDefaultBreakdowns}
+            onOpenWorkload={handleOpenWorkloadFromBreakdown}
+            onOpenSetup={() => setIsSetupOpen(true)}
+          />
         ) : periods.length === 0 ? (
           <section className="rounded-lg border border-dashed border-[#D1D5DB] bg-white px-6 py-14 text-center">
             <h1 className="text-xl font-semibold text-[#111827]">
@@ -354,7 +480,7 @@ export default function App() {
             <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
               <button
                 type="button"
-                onClick={() => setIsUploadOpen(true)}
+                onClick={() => handleOpenUpload('staffing')}
                 className="rounded-md bg-[#1E3A8A] px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-[#1E40AF]"
               >
                 นำเข้าไฟล์ CSV ใหม่
@@ -413,6 +539,13 @@ export default function App() {
                 supabaseStatus={supabaseStatus}
                 initialBreakdowns={studentBreakdowns}
                 initialBreakdownMode={studentBreakdownMode}
+                preferredSchoolCode={preferredWorkloadCode}
+                onConsumePreferredSchool={() => setPreferredWorkloadCode(null)}
+                onBreakdownsUpdated={(updated, mode) => {
+                  setStudentBreakdowns(updated);
+                  setStudentBreakdownMode(mode);
+                  refreshBreakdowns(updated[0]?.semester || selectedBreakdownSemester);
+                }}
                 onOpenSetup={() => setIsSetupOpen(true)}
               />
             )}
@@ -440,7 +573,7 @@ export default function App() {
                 onDeletePeriod={handleDeletePeriod}
                 onDeleteYear={handleDeleteYear}
                 onDeleteAll={handleDeleteAllPeriods}
-                onOpenUpload={() => setIsUploadOpen(true)}
+                onOpenUpload={() => handleOpenUpload('staffing')}
               />
             )}
           </>
@@ -465,6 +598,7 @@ export default function App() {
         onClose={() => setIsUploadOpen(false)}
         existingPeriods={periods}
         supabaseStatus={supabaseStatus}
+        initialMode={uploadModalMode}
         onSuccess={handleUploadSuccess}
         onStudentBreakdownSuccess={handleStudentBreakdownSuccess}
         onOpenSetup={() => setIsSetupOpen(true)}

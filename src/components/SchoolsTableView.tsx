@@ -84,7 +84,8 @@ export function SchoolsTableView({
     return records
       .filter((r) => {
         if (q) {
-          const hay = `${r.school_code} ${r.school_name} ${r.subdistrict} ${r.district} ${r.project_name}`.toLowerCase();
+          const fullName = r.school_name.startsWith('โรงเรียน') ? r.school_name : `โรงเรียน${r.school_name}`;
+          const hay = `${r.school_code} ${r.school_name} ${fullName} ${r.subdistrict} ${r.district} ${r.project_name}`.toLowerCase();
           if (!hay.includes(q)) return false;
         }
         if (statusFilter === 'has_branch') return relatedBranchCodes.has(r.school_code);
