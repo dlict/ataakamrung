@@ -1098,23 +1098,29 @@ export function createApiApp(): Express {
           .from('school_student_breakdowns')
           .upsert(seedPayload, { onConflict: 'semester,school_code' });
 
-        if (!seedErr) {
-          const { data: seededRows } = await client
-            .from('school_student_breakdowns')
-            .select('*')
-            .eq('semester', semester)
-            .order('school_code', { ascending: true })
-            .range(0, 4999);
-
-          res.json({
-            mode: 'supabase',
-            studentBreakdownReady: true,
-            seeded: true,
-            semester,
-            records: seededRows ?? SCHOOLMIS_2569_2_RECORDS,
-          });
-          return;
+        if (seedErr) {
+          throw new Error(seedErr.message);
         }
+
+        const { data: seededRows, error: seededFetchErr } = await client
+          .from('school_student_breakdowns')
+          .select('*')
+          .eq('semester', semester)
+          .order('school_code', { ascending: true })
+          .range(0, 4999);
+
+        if (seededFetchErr) {
+          throw new Error(seededFetchErr.message);
+        }
+
+        res.json({
+          mode: 'supabase',
+          studentBreakdownReady: true,
+          seeded: true,
+          semester,
+          records: seededRows ?? SCHOOLMIS_2569_2_RECORDS,
+        });
+        return;
       }
 
       res.json({
@@ -1189,6 +1195,7 @@ export function createApiApp(): Express {
 
       res.status(201).json({
         ok: true,
+        mode: 'supabase',
         semester,
         count: records.length,
         records: savedRows ?? records,

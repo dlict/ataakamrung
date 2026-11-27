@@ -44,6 +44,8 @@ interface WorkloadReportViewProps {
   records: SchoolStaffingRecord[];
   buddhistYear?: number;
   supabaseStatus?: SupabaseStatus | null;
+  initialBreakdowns?: SchoolStudentBreakdown[] | null;
+  initialBreakdownMode?: 'supabase' | 'preview';
   onOpenSetup?: () => void;
 }
 
@@ -102,6 +104,8 @@ export function WorkloadReportView({
   records,
   buddhistYear = 2569,
   supabaseStatus = null,
+  initialBreakdowns = null,
+  initialBreakdownMode = 'preview',
   onOpenSetup,
 }: WorkloadReportViewProps) {
   const [schoolSearch, setSchoolSearch] = useState('');
@@ -110,9 +114,9 @@ export function WorkloadReportView({
     () => readStoredMap()
   );
   const [studentBreakdowns, setStudentBreakdowns] = useState<SchoolStudentBreakdown[]>(
-    () => SCHOOLMIS_2569_2_RECORDS
+    () => (initialBreakdowns && initialBreakdowns.length > 0 ? initialBreakdowns : SCHOOLMIS_2569_2_RECORDS)
   );
-  const [breakdownSource, setBreakdownSource] = useState<'supabase' | 'preview'>('preview');
+  const [breakdownSource, setBreakdownSource] = useState<'supabase' | 'preview'>(initialBreakdownMode);
   const [uploadingMis, setUploadingMis] = useState(false);
   const [meta, setMeta] = useState<WorkloadSignOffMeta>(() =>
     readStoredMeta(buddhistYear)
@@ -124,6 +128,13 @@ export function WorkloadReportView({
     text: string;
   } | null>(null);
   const firstStudentInputRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    if (initialBreakdowns && initialBreakdowns.length > 0) {
+      setStudentBreakdowns(initialBreakdowns);
+      setBreakdownSource(initialBreakdownMode);
+    }
+  }, [initialBreakdowns, initialBreakdownMode]);
 
   useEffect(() => {
     let cancelled = false;
@@ -412,6 +423,7 @@ export function WorkloadReportView({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           semester: '2569-2',
+          source_filename: file.name,
           records: parsed.records,
         }),
       });

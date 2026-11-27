@@ -13,6 +13,7 @@ import type {
   ActiveTab,
   ReportPeriod,
   SchoolStaffingRecord,
+  SchoolStudentBreakdown,
   SupabaseStatus,
 } from './types/staffing';
 import {
@@ -31,6 +32,9 @@ export default function App() {
   const [loadingRecords, setLoadingRecords] = useState<boolean>(false);
   const [errorMessage, setErrorMessage] = useState<string>('');
 
+  const [studentBreakdowns, setStudentBreakdowns] = useState<SchoolStudentBreakdown[] | null>(null);
+  const [studentBreakdownMode, setStudentBreakdownMode] = useState<'supabase' | 'preview'>('preview');
+
   const [selectedDistrict, setSelectedDistrict] = useState<string>('all');
   const [selectedSize, setSelectedSize] = useState<string>('all');
   const [selectedType, setSelectedType] = useState<string>('all');
@@ -44,9 +48,10 @@ export default function App() {
     setLoadingPeriods(true);
     setErrorMessage('');
     try {
-      const [statusRes, periodsRes] = await Promise.all([
+      const [statusRes, periodsRes, breakdownsRes] = await Promise.all([
         fetch('/api/status'),
         fetch('/api/periods'),
+        fetch('/api/student-breakdowns?semester=2569-2').catch(() => null),
       ]);
       const statusData = await parseJsonResponse<SupabaseStatus>(statusRes);
       const periodsData = await parseJsonResponse<{
@@ -56,6 +61,21 @@ export default function App() {
 
       if (!periodsRes.ok) {
         throw new Error(periodsData.error || 'ไม่สามารถโหลดข้อมูลได้');
+      }
+
+      if (breakdownsRes && breakdownsRes.ok) {
+        try {
+          const bdData = await parseJsonResponse<{
+            mode?: 'supabase' | 'preview';
+            records?: SchoolStudentBreakdown[];
+          }>(breakdownsRes);
+          if (Array.isArray(bdData.records) && bdData.records.length > 0) {
+            setStudentBreakdowns(bdData.records);
+            setStudentBreakdownMode(bdData.mode === 'supabase' ? 'supabase' : 'preview');
+          }
+        } catch {
+          // Non-fatal; WorkloadReportView still keeps bundled fallback
+        }
       }
 
       setSupabaseStatus(statusData);
@@ -381,6 +401,8 @@ export default function App() {
                 records={filteredRecords}
                 buddhistYear={currentPeriod?.buddhist_year}
                 supabaseStatus={supabaseStatus}
+                initialBreakdowns={studentBreakdowns}
+                initialBreakdownMode={studentBreakdownMode}
                 onOpenSetup={() => setIsSetupOpen(true)}
               />
             )}
