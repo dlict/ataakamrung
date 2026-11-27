@@ -108,3 +108,64 @@ drop policy if exists "Allow read school_staffing_records" on public.school_staf
 revoke all on table public.report_periods from anon;
 revoke all on table public.school_staffing_records from anon;
 
+-- Grade-by-grade & room-by-room student counts from SchoolMIS (ปริมาณงานของสถานศึกษา)
+create table if not exists public.school_student_breakdowns (
+  id uuid primary key default gen_random_uuid(),
+  semester text not null default '2569-2',
+  district_code text not null default '58010000',
+  district_name text not null default '',
+  school_code text not null,
+  school_name text not null,
+  source_filename text not null default '',
+
+  k0_students integer not null default 0,
+  k0_rooms integer not null default 0,
+  k1_students integer not null default 0,
+  k1_rooms integer not null default 0,
+  k2_students integer not null default 0,
+  k2_rooms integer not null default 0,
+
+  p1_students integer not null default 0,
+  p1_rooms integer not null default 0,
+  p2_students integer not null default 0,
+  p2_rooms integer not null default 0,
+  p3_students integer not null default 0,
+  p3_rooms integer not null default 0,
+  p4_students integer not null default 0,
+  p4_rooms integer not null default 0,
+  p5_students integer not null default 0,
+  p5_rooms integer not null default 0,
+  p6_students integer not null default 0,
+  p6_rooms integer not null default 0,
+
+  m1_students integer not null default 0,
+  m1_rooms integer not null default 0,
+  m2_students integer not null default 0,
+  m2_rooms integer not null default 0,
+  m3_students integer not null default 0,
+  m3_rooms integer not null default 0,
+  m4_students integer not null default 0,
+  m4_rooms integer not null default 0,
+  m5_students integer not null default 0,
+  m5_rooms integer not null default 0,
+  m6_students integer not null default 0,
+  m6_rooms integer not null default 0,
+
+  total_male integer not null default 0,
+  total_female integer not null default 0,
+  total_students integer not null default 0,
+  total_rooms integer not null default 0,
+
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  constraint uq_student_breakdown_semester_school unique (semester, school_code)
+);
+
+create index if not exists idx_student_breakdowns_semester on public.school_student_breakdowns(semester);
+create index if not exists idx_student_breakdowns_school_code on public.school_student_breakdowns(school_code);
+
+alter table public.school_student_breakdowns enable row level security;
+
+grant select, insert, update, delete on table public.school_student_breakdowns to service_role;
+revoke all on table public.school_student_breakdowns from anon;
+

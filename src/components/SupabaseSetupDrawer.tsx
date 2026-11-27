@@ -87,6 +87,14 @@ export function SupabaseSetupDrawer({
                 <div>
                   • Key: {status.diagnostic.keySource} ({status.diagnostic.keyKind})
                 </div>
+                {status.tablesReady && (
+                  <div className={status.studentBreakdownReady ? 'text-[#15803D]' : 'text-[#B45309]'}>
+                    • ตารางนักเรียนแยกชั้น (school_student_breakdowns):{' '}
+                    {status.studentBreakdownReady
+                      ? 'สร้างแล้ว พร้อมใช้งาน ✓'
+                      : 'ยังไม่พบตาราง — กรุณาคัดลอก SQL ด้านล่างไปกด Run ใน SQL Editor เพื่อสร้างตารางนี้เพิ่มเติม'}
+                  </div>
+                )}
                 {status.diagnostic.errorDetail && (
                   <div className="text-[#B91C1C]">
                     • รายละเอียดจาก Supabase: [{status.diagnostic.httpStatus ?? status.diagnostic.errorCode ?? 'ERR'}] {status.diagnostic.errorDetail}

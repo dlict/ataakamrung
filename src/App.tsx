@@ -380,6 +380,8 @@ export default function App() {
               <WorkloadReportView
                 records={filteredRecords}
                 buddhistYear={currentPeriod?.buddhist_year}
+                supabaseStatus={supabaseStatus}
+                onOpenSetup={() => setIsSetupOpen(true)}
               />
             )}
 

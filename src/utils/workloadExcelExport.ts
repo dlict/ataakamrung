@@ -152,7 +152,7 @@ export async function exportWorkloadExcel({
 
   // Left Table Data (Rows 10-21)
   const leftRows: Array<
-    | { type: 'grade'; rowNum: number; label: string; students: number; rooms: number; isFirst?: boolean; isLast?: boolean }
+    | { type: 'grade'; rowNum: number; label: string; students: number; rooms: number; maxPerRoom: number; isFirst?: boolean; isLast?: boolean }
     | { type: 'sum'; rowNum: number; label: string; stuFormula: string; roomFormula: string; students: number; rooms: number }
   > = [
     ...PRE_PRIMARY_GRADES.map((g, idx) => ({
@@ -161,6 +161,7 @@ export async function exportWorkloadExcel({
       label: g.label,
       students: grades[g.key].students,
       rooms: grades[g.key].rooms,
+      maxPerRoom: g.maxPerRoom,
       isFirst: idx === 0,
       isLast: idx === PRE_PRIMARY_GRADES.length - 1,
     })),
@@ -179,6 +180,7 @@ export async function exportWorkloadExcel({
       label: g.label,
       students: grades[g.key].students,
       rooms: grades[g.key].rooms,
+      maxPerRoom: g.maxPerRoom,
       isFirst: idx === 0,
       isLast: idx === PRIMARY_GRADES.length - 1,
     })),
@@ -211,7 +213,15 @@ export async function exportWorkloadExcel({
     if (item.type === 'grade') {
       cLabel.value = item.label;
       cStu.value = item.students;
-      cRoom.value = item.rooms;
+      const autoRooms =
+        item.students > 0 ? Math.ceil(item.students / item.maxPerRoom) : 0;
+      cRoom.value =
+        item.rooms === autoRooms
+          ? {
+              formula: `IF(D${item.rowNum}>0,ROUNDUP(D${item.rowNum}/${item.maxPerRoom},0),0)`,
+              result: item.rooms,
+            }
+          : item.rooms;
 
       const topBorder = item.isFirst ? THIN_BLACK : DOTTED_BLACK;
       const bottomBorder = item.isLast ? THIN_BLACK : DOTTED_BLACK;
@@ -252,7 +262,7 @@ export async function exportWorkloadExcel({
 
   // Right Table Data (Rows 10-19)
   const rightRows: Array<
-    | { type: 'grade'; rowNum: number; label: string; students: number; rooms: number; isFirst?: boolean; isLast?: boolean }
+    | { type: 'grade'; rowNum: number; label: string; students: number; rooms: number; maxPerRoom: number; isFirst?: boolean; isLast?: boolean }
     | { type: 'sum'; rowNum: number; label: string; stuFormula: string; roomFormula: string; students: number; rooms: number }
   > = [
     ...LOWER_SECONDARY_GRADES.map((g, idx) => ({
@@ -261,6 +271,7 @@ export async function exportWorkloadExcel({
       label: g.label,
       students: grades[g.key].students,
       rooms: grades[g.key].rooms,
+      maxPerRoom: g.maxPerRoom,
       isFirst: idx === 0,
       isLast: idx === LOWER_SECONDARY_GRADES.length - 1,
     })),
@@ -279,6 +290,7 @@ export async function exportWorkloadExcel({
       label: g.label,
       students: grades[g.key].students,
       rooms: grades[g.key].rooms,
+      maxPerRoom: g.maxPerRoom,
       isFirst: idx === 0,
       isLast: idx === UPPER_SECONDARY_GRADES.length - 1,
     })),
@@ -321,7 +333,15 @@ export async function exportWorkloadExcel({
     if (item.type === 'grade') {
       cLabelG.value = item.label;
       cStu.value = item.students;
-      cRoom.value = item.rooms;
+      const autoRooms =
+        item.students > 0 ? Math.ceil(item.students / item.maxPerRoom) : 0;
+      cRoom.value =
+        item.rooms === autoRooms
+          ? {
+              formula: `IF(I${item.rowNum}>0,ROUNDUP(I${item.rowNum}/${item.maxPerRoom},0),0)`,
+              result: item.rooms,
+            }
+          : item.rooms;
 
       const topBorder = item.isFirst ? THIN_BLACK : DOTTED_BLACK;
       const bottomBorder = item.isLast ? THIN_BLACK : DOTTED_BLACK;

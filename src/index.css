@@ -23,6 +23,17 @@
   .font-sarabun {
     font-family: "TH Sarabun New", "Sarabun", sans-serif;
   }
+
+  .no-spinner {
+    -moz-appearance: textfield;
+    appearance: textfield;
+  }
+
+  .no-spinner::-webkit-outer-spin-button,
+  .no-spinner::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

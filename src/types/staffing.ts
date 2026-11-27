@@ -187,9 +187,58 @@ export interface DistrictSummary {
   surplusSchools: number;
 }
 
+export interface SchoolStudentBreakdown {
+  id?: string;
+  semester: string;
+  district_code: string;
+  district_name: string;
+  school_code: string;
+  school_name: string;
+  source_filename: string;
+
+  k0_students: number;
+  k0_rooms: number;
+  k1_students: number;
+  k1_rooms: number;
+  k2_students: number;
+  k2_rooms: number;
+
+  p1_students: number;
+  p1_rooms: number;
+  p2_students: number;
+  p2_rooms: number;
+  p3_students: number;
+  p3_rooms: number;
+  p4_students: number;
+  p4_rooms: number;
+  p5_students: number;
+  p5_rooms: number;
+  p6_students: number;
+  p6_rooms: number;
+
+  m1_students: number;
+  m1_rooms: number;
+  m2_students: number;
+  m2_rooms: number;
+  m3_students: number;
+  m3_rooms: number;
+  m4_students: number;
+  m4_rooms: number;
+  m5_students: number;
+  m5_rooms: number;
+  m6_students: number;
+  m6_rooms: number;
+
+  total_male: number;
+  total_female: number;
+  total_students: number;
+  total_rooms: number;
+}
+
 export interface SupabaseStatus {
   configured: boolean;
   tablesReady: boolean;
+  studentBreakdownReady?: boolean;
   mode: 'supabase' | 'preview';
   message: string;
   diagnostic?: {

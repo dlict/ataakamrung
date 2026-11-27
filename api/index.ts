@@ -3,6 +3,7 @@ import express, { type Express } from 'express';
 import fs from 'node:fs';
 import path from 'node:path';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import { SCHOOLMIS_2569_2_RECORDS } from '../src/data/schoolmis2569_2';
 
 const THAI_MONTHS = [
   { value: 1, label: 'มกราคม', short: 'ม.ค.' },
@@ -92,6 +93,7 @@ interface ReportPeriod {
 interface SupabaseStatus {
   configured: boolean;
   tablesReady: boolean;
+  studentBreakdownReady?: boolean;
   mode: 'supabase' | 'preview';
   message: string;
   diagnostic?: {
@@ -202,6 +204,61 @@ drop policy if exists "Allow read report_periods" on public.report_periods;
 drop policy if exists "Allow read school_staffing_records" on public.school_staffing_records;
 revoke all on table public.report_periods from anon;
 revoke all on table public.school_staffing_records from anon;
+
+create table if not exists public.school_student_breakdowns (
+  id uuid primary key default gen_random_uuid(),
+  semester text not null default '2569-2',
+  district_code text not null default '58010000',
+  district_name text not null default '',
+  school_code text not null,
+  school_name text not null,
+  source_filename text not null default '',
+  k0_students integer not null default 0,
+  k0_rooms integer not null default 0,
+  k1_students integer not null default 0,
+  k1_rooms integer not null default 0,
+  k2_students integer not null default 0,
+  k2_rooms integer not null default 0,
+  p1_students integer not null default 0,
+  p1_rooms integer not null default 0,
+  p2_students integer not null default 0,
+  p2_rooms integer not null default 0,
+  p3_students integer not null default 0,
+  p3_rooms integer not null default 0,
+  p4_students integer not null default 0,
+  p4_rooms integer not null default 0,
+  p5_students integer not null default 0,
+  p5_rooms integer not null default 0,
+  p6_students integer not null default 0,
+  p6_rooms integer not null default 0,
+  m1_students integer not null default 0,
+  m1_rooms integer not null default 0,
+  m2_students integer not null default 0,
+  m2_rooms integer not null default 0,
+  m3_students integer not null default 0,
+  m3_rooms integer not null default 0,
+  m4_students integer not null default 0,
+  m4_rooms integer not null default 0,
+  m5_students integer not null default 0,
+  m5_rooms integer not null default 0,
+  m6_students integer not null default 0,
+  m6_rooms integer not null default 0,
+  total_male integer not null default 0,
+  total_female integer not null default 0,
+  total_students integer not null default 0,
+  total_rooms integer not null default 0,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  constraint uq_student_breakdown_semester_school unique (semester, school_code)
+);
+
+create index if not exists idx_student_breakdowns_semester on public.school_student_breakdowns(semester);
+create index if not exists idx_student_breakdowns_school_code on public.school_student_breakdowns(school_code);
+
+alter table public.school_student_breakdowns enable row level security;
+
+grant select, insert, update, delete on table public.school_student_breakdowns to service_role;
+revoke all on table public.school_student_breakdowns from anon;
 `;
 
 const UUID_REGEX =
@@ -451,9 +508,15 @@ async function checkSupabaseStatus(): Promise<SupabaseStatus> {
       };
     }
 
+    const { error: bdErr } = await client
+      .from('school_student_breakdowns')
+      .select('id')
+      .limit(1);
+
     return {
       configured: true,
       tablesReady: true,
+      studentBreakdownReady: !bdErr,
       mode: 'supabase',
       message: 'เชื่อมต่อฐานข้อมูล Supabase พร้อมใช้งาน',
       diagnostic: {
@@ -558,6 +621,63 @@ function sanitizeRecords(rawRecords: unknown[]): SchoolStaffingRecord[] {
       secondment_in: sanitizeInt(r.secondment_in, 0),
       royal_decree_teacher: sanitizeInt(r.royal_decree_teacher, 0),
       contract_teacher: sanitizeInt(r.contract_teacher, 0),
+    };
+  });
+}
+
+function sanitizeStudentBreakdowns(
+  rawRecords: unknown[],
+  semester: string,
+  sourceFilename: string
+) {
+  return rawRecords.map((item) => {
+    const r = (item ?? {}) as Record<string, unknown>;
+    return {
+      semester,
+      district_code: sanitizeText(r.district_code, 32) || '58010000',
+      district_name: sanitizeText(r.district_name, 150) || 'สพป.แม่ฮ่องสอน เขต 1',
+      school_code: sanitizeText(r.school_code, 32),
+      school_name: sanitizeText(r.school_name, 200),
+      source_filename: sourceFilename,
+
+      k0_students: sanitizeInt(r.k0_students, 0),
+      k0_rooms: sanitizeInt(r.k0_rooms, 0),
+      k1_students: sanitizeInt(r.k1_students, 0),
+      k1_rooms: sanitizeInt(r.k1_rooms, 0),
+      k2_students: sanitizeInt(r.k2_students, 0),
+      k2_rooms: sanitizeInt(r.k2_rooms, 0),
+
+      p1_students: sanitizeInt(r.p1_students, 0),
+      p1_rooms: sanitizeInt(r.p1_rooms, 0),
+      p2_students: sanitizeInt(r.p2_students, 0),
+      p2_rooms: sanitizeInt(r.p2_rooms, 0),
+      p3_students: sanitizeInt(r.p3_students, 0),
+      p3_rooms: sanitizeInt(r.p3_rooms, 0),
+      p4_students: sanitizeInt(r.p4_students, 0),
+      p4_rooms: sanitizeInt(r.p4_rooms, 0),
+      p5_students: sanitizeInt(r.p5_students, 0),
+      p5_rooms: sanitizeInt(r.p5_rooms, 0),
+      p6_students: sanitizeInt(r.p6_students, 0),
+      p6_rooms: sanitizeInt(r.p6_rooms, 0),
+
+      m1_students: sanitizeInt(r.m1_students, 0),
+      m1_rooms: sanitizeInt(r.m1_rooms, 0),
+      m2_students: sanitizeInt(r.m2_students, 0),
+      m2_rooms: sanitizeInt(r.m2_rooms, 0),
+      m3_students: sanitizeInt(r.m3_students, 0),
+      m3_rooms: sanitizeInt(r.m3_rooms, 0),
+      m4_students: sanitizeInt(r.m4_students, 0),
+      m4_rooms: sanitizeInt(r.m4_rooms, 0),
+      m5_students: sanitizeInt(r.m5_students, 0),
+      m5_rooms: sanitizeInt(r.m5_rooms, 0),
+      m6_students: sanitizeInt(r.m6_students, 0),
+      m6_rooms: sanitizeInt(r.m6_rooms, 0),
+
+      total_male: sanitizeInt(r.total_male, 0),
+      total_female: sanitizeInt(r.total_female, 0),
+      total_students: sanitizeInt(r.total_students, 0),
+      total_rooms: sanitizeInt(r.total_rooms, 0),
+      updated_at: new Date().toISOString(),
     };
   });
 }
@@ -937,6 +1057,145 @@ export function createApiApp(): Express {
     } catch (err) {
       res.status(500).json({
         error: err instanceof Error ? err.message : 'ลบข้อมูลรายปีไม่สำเร็จ',
+      });
+    }
+  });
+
+  app.get('/api/student-breakdowns', async (req, res) => {
+    try {
+      const semester = sanitizeText(req.query.semester, 32) || '2569-2';
+      const status = await checkSupabaseStatus();
+
+      if (!status.tablesReady || !status.studentBreakdownReady) {
+        res.json({
+          mode: 'preview',
+          studentBreakdownReady: false,
+          seeded: false,
+          semester: '2569-2',
+          records: SCHOOLMIS_2569_2_RECORDS,
+        });
+        return;
+      }
+
+      const client = getSupabaseClient()!;
+      const { data, error } = await client
+        .from('school_student_breakdowns')
+        .select('*')
+        .eq('semester', semester)
+        .order('school_code', { ascending: true })
+        .range(0, 4999);
+
+      if (error) {
+        throw new Error(error.message);
+      }
+
+      if ((data ?? []).length === 0 && semester === '2569-2') {
+        const seedPayload = SCHOOLMIS_2569_2_RECORDS.map((r) => ({
+          ...r,
+          updated_at: new Date().toISOString(),
+        }));
+        const { error: seedErr } = await client
+          .from('school_student_breakdowns')
+          .upsert(seedPayload, { onConflict: 'semester,school_code' });
+
+        if (!seedErr) {
+          const { data: seededRows } = await client
+            .from('school_student_breakdowns')
+            .select('*')
+            .eq('semester', semester)
+            .order('school_code', { ascending: true })
+            .range(0, 4999);
+
+          res.json({
+            mode: 'supabase',
+            studentBreakdownReady: true,
+            seeded: true,
+            semester,
+            records: seededRows ?? SCHOOLMIS_2569_2_RECORDS,
+          });
+          return;
+        }
+      }
+
+      res.json({
+        mode: 'supabase',
+        studentBreakdownReady: true,
+        seeded: false,
+        semester,
+        records: data ?? [],
+      });
+    } catch (err) {
+      res.status(500).json({
+        error: err instanceof Error ? err.message : 'ไม่สามารถโหลดข้อมูลนักเรียนแยกชั้นได้',
+      });
+    }
+  });
+
+  app.post('/api/student-breakdowns', async (req, res) => {
+    try {
+      const status = await checkSupabaseStatus();
+      if (!status.tablesReady || !status.studentBreakdownReady) {
+        res.status(503).json({
+          error:
+            'ยังไม่ได้สร้างตาราง school_student_breakdowns ใน Supabase กรุณารันคำสั่ง SQL ล่าสุดใน Supabase SQL Editor ก่อนบันทึก',
+        });
+        return;
+      }
+
+      const body = (req.body ?? {}) as Record<string, unknown>;
+      const semester = sanitizeText(body.semester, 32) || '2569-2';
+      const sourceFilename =
+        sanitizeText(body.source_filename, 255) || 'schoolmis.csv';
+      const rawRecords = body.records;
+
+      if (!Array.isArray(rawRecords) || rawRecords.length === 0 || rawRecords.length > 5000) {
+        res.status(400).json({ error: 'ไม่พบข้อมูลนักเรียนแยกชั้นในไฟล์ที่นำเข้า' });
+        return;
+      }
+
+      const records = sanitizeStudentBreakdowns(
+        rawRecords,
+        semester,
+        sourceFilename
+      ).filter((r) => r.school_code.length > 0 && r.school_name.length > 0);
+
+      if (records.length === 0) {
+        res.status(400).json({ error: 'ไม่พบรายการโรงเรียนที่ถูกต้องในไฟล์ SchoolMIS' });
+        return;
+      }
+
+      const client = getSupabaseClient()!;
+      const batchSize = 500;
+      for (let i = 0; i < records.length; i += batchSize) {
+        const batch = records.slice(i, i + batchSize);
+        const { error: upsertErr } = await client
+          .from('school_student_breakdowns')
+          .upsert(batch, { onConflict: 'semester,school_code' });
+        if (upsertErr) {
+          throw new Error(upsertErr.message);
+        }
+      }
+
+      const { data: savedRows, error: fetchErr } = await client
+        .from('school_student_breakdowns')
+        .select('*')
+        .eq('semester', semester)
+        .order('school_code', { ascending: true })
+        .range(0, 4999);
+
+      if (fetchErr) {
+        throw new Error(fetchErr.message);
+      }
+
+      res.status(201).json({
+        ok: true,
+        semester,
+        count: records.length,
+        records: savedRows ?? records,
+      });
+    } catch (err) {
+      res.status(500).json({
+        error: err instanceof Error ? err.message : 'บันทึกข้อมูลนักเรียนแยกชั้นลง Supabase ไม่สำเร็จ',
       });
     }
   });
