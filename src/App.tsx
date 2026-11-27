@@ -260,6 +260,16 @@ export default function App() {
     setActiveTab('overview');
   }
 
+  function handleStudentBreakdownSuccess(
+    savedRecords: SchoolStudentBreakdown[],
+    mode: 'supabase' | 'preview'
+  ) {
+    setStudentBreakdowns(savedRecords);
+    setStudentBreakdownMode(mode);
+    setIsUploadOpen(false);
+    setActiveTab('workload');
+  }
+
   return (
     <div className="min-h-screen flex flex-col bg-[#F8F9FA] text-[#111827] print:bg-white">
       <TopBar
@@ -456,6 +466,7 @@ export default function App() {
         existingPeriods={periods}
         supabaseStatus={supabaseStatus}
         onSuccess={handleUploadSuccess}
+        onStudentBreakdownSuccess={handleStudentBreakdownSuccess}
         onOpenSetup={() => setIsSetupOpen(true)}
       />
 
