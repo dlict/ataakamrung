@@ -8,6 +8,7 @@ import { SupabaseSetupDrawer } from './components/SupabaseSetupDrawer';
 import { Toolbar } from './components/Toolbar';
 import { TopBar } from './components/TopBar';
 import { UploadModal } from './components/UploadModal';
+import { WorkloadReportView } from './components/WorkloadReportView';
 import type {
   ActiveTab,
   ReportPeriod,
@@ -344,9 +345,15 @@ export default function App() {
             {activeTab === 'overview' && (
               <OverviewView
                 records={filteredRecords}
+                allPeriodRecords={records}
                 summary={summary}
                 districtBreakdown={districtBreakdown}
+                periods={periods}
+                selectedPeriodId={selectedPeriodId}
                 selectedDistrict={selectedDistrict}
+                selectedSize={selectedSize}
+                selectedType={selectedType}
+                onSelectPeriod={setSelectedPeriodId}
                 onSelectDistrict={setSelectedDistrict}
                 onSelectSchool={setSelectedSchool}
                 onNavigateToSchools={() => setActiveTab('schools')}
@@ -366,6 +373,13 @@ export default function App() {
                 compareCodes={compareSchoolCodes}
                 onToggleCompareCode={handleToggleCompareCode}
                 onGoToCompare={() => setActiveTab('compare-schools')}
+              />
+            )}
+
+            {activeTab === 'workload' && (
+              <WorkloadReportView
+                records={filteredRecords}
+                buddhistYear={currentPeriod?.buddhist_year}
               />
             )}
 

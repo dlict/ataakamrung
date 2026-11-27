@@ -19,6 +19,10 @@
   .tabular-nums {
     font-variant-numeric: tabular-nums;
   }
+
+  .font-sarabun {
+    font-family: "TH Sarabun New", "Sarabun", sans-serif;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

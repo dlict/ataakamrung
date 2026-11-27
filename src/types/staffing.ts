@@ -203,4 +203,4 @@ export interface SupabaseStatus {
   };
 }
 
-export type ActiveTab = 'overview' | 'schools' | 'compare-schools' | 'compare';
+export type ActiveTab = 'overview' | 'schools' | 'workload' | 'compare-schools' | 'compare';

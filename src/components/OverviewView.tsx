@@ -3,6 +3,7 @@ import { ArrowRight } from 'lucide-react';
 import type {
   AggregateSummary,
   DistrictSummary,
+  ReportPeriod,
   SchoolStaffingRecord,
 } from '../types/staffing';
 import {
@@ -19,12 +20,19 @@ import {
 import { DistrictComparisonChart } from './DistrictComparisonChart';
 import { DistrictPositionChart } from './DistrictPositionChart';
 import { SchoolDistributionCharts } from './SchoolDistributionCharts';
+import { TeacherTrendChart } from './TeacherTrendChart';
 
 interface OverviewViewProps {
   records: SchoolStaffingRecord[];
+  allPeriodRecords: SchoolStaffingRecord[];
   summary: AggregateSummary;
   districtBreakdown: DistrictSummary[];
+  periods: ReportPeriod[];
+  selectedPeriodId: string;
   selectedDistrict: string;
+  selectedSize: string;
+  selectedType: string;
+  onSelectPeriod: (periodId: string) => void;
   onSelectDistrict: (district: string) => void;
   onSelectSchool: (school: SchoolStaffingRecord) => void;
   onNavigateToSchools: () => void;
@@ -34,9 +42,15 @@ type PriorityMode = 'deficit' | 'surplus' | 'vacant' | 'vacant_director' | 'reti
 
 export function OverviewView({
   records,
+  allPeriodRecords,
   summary,
   districtBreakdown,
+  periods,
+  selectedPeriodId,
   selectedDistrict,
+  selectedSize,
+  selectedType,
+  onSelectPeriod,
   onSelectDistrict,
   onSelectSchool,
   onNavigateToSchools,
@@ -113,6 +127,15 @@ export function OverviewView({
         .sort((a, b) => b.diff_total - a.diff_total || b.diff_teacher_pct - b.diff_teacher_pct)
         .slice(0, 10);
     }
+    if (priorityMode === 'vacant') {
+      return [...records]
+        .filter((r) => getVacantCounts(r).total > 0)
+        .sort(
+          (a, b) =>
+            getVacantCounts(b).total - getVacantCounts(a).total ||
+            b.students_count - a.students_count
+        );
+    }
     if (priorityMode === 'vacant_director') {
       return [...records]
         .filter((r) => r.criteria_director > r.actual_director)
@@ -134,8 +157,6 @@ export function OverviewView({
   const deficitPct = (summary.deficitSchools / totalForBar) * 100;
   const balancedPct = (summary.balancedSchools / totalForBar) * 100;
   const surplusPct = (summary.surplusSchools / totalForBar) * 100;
-
-  const vacantFromJ18 = summary.j18CalcTotal - summary.actualTotal;
 
   return (
     <div className="space-y-6">
@@ -304,6 +325,17 @@ export function OverviewView({
           </div>
         </div>
       </section>
+
+      {/* Recharts Historical Teacher Trend Line Chart */}
+      <TeacherTrendChart
+        periods={periods}
+        selectedPeriodId={selectedPeriodId}
+        currentPeriodRecords={allPeriodRecords}
+        selectedDistrict={selectedDistrict}
+        selectedSize={selectedSize}
+        selectedType={selectedType}
+        onSelectPeriod={onSelectPeriod}
+      />
 
       {/* Recharts Actual vs Criteria per District */}
       <DistrictComparisonChart
